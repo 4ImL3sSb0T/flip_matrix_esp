@@ -1,8 +1,8 @@
 #include "uart_async.h"
 #include "service/tools/common_def.h"
-#include "FreeRTOS.h"
-#include "semphr.h"
-#include "stream_buffer.h"
+#include "FreeRTOS.h/FreeRTOS.h"
+#include "FreeRTOS.h/semphr.h"
+#include "FreeRTOS.h/stream_buffer.h"
 #include "usart.h"
 
 #define UART_ASYNC_TX_STREAM_BUFFER_SIZE 256

@@ -1,7 +1,6 @@
 #include "app_water_sim.h"
 
-#include "task.h"
-#include "service/cli/log/log.h"
+#include "FreeRTOS.h/FreeRTOS.h"
 #include <math.h>
 #include "service/imu/imu_service.h"
 

@@ -1,8 +1,8 @@
 #include "imu_service.h"
 #include "MadgwickAHRS/MadgwickAHRS.h"
-#include "FreeRTOS.h"
-#include "task.h"
-#include "semphr.h"
+#include "FreeRTOS/FreeRTOS.h"
+#include "FreeRTOS/task.h"
+#include "FreeRTOS/semphr.h"
 
 SemaphoreHandle_t imu_sensor_handler_semaphore;
 

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"D:\\\\Project\\\\Esp32s3_LEDPan\\\\src\" -Recurse -Name)",
+      "Bash(Select-Object -First 80)"
+    ]
+  }
+}

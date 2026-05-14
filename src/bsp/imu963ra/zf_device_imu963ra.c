@@ -1,33 +1,44 @@
-#include "spi.h"
-#include "main.h"
-#include "cmsis_os.h"
+#include "driver/spi_master.h"
+#include "driver/gpio.h"
+#include "esp_log.h"
+
 #include <stdbool.h>
 
 #include "service/tools/vec_math.h"
 #include "service/tools/common_def.h"
 #include "zf_device_imu963ra.h"
 
-/* ── HAL port of ZF SPI functions ───────────────────────────────────── */
+static int IMU963RA_MOSI_PIN = GPIO_NUM_11;
+static int IMU963RA_MISO_PIN = GPIO_NUM_12;
+static int IMU963RA_SCK_PIN  = GPIO_NUM_13;
+static int IMU963RA_CS_PIN   = GPIO_NUM_10;
 
-#define IMU963RA_CS_LOW()   HAL_GPIO_WritePin(IMU_CS_GPIO_Port, IMU_CS_Pin, GPIO_PIN_RESET)
-#define IMU963RA_CS_HIGH()  HAL_GPIO_WritePin(IMU_CS_GPIO_Port, IMU_CS_Pin, GPIO_PIN_SET)
+static spi_device_handle_t spi;
+
 
 static void imu963ra_spi_write_reg(uint8_t reg, uint8_t data)
 {
     uint8_t tx[2] = { reg, data };
-    uint8_t rx[2];
-    IMU963RA_CS_LOW();
-    HAL_SPI_TransmitReceive(&hspi6, tx, rx, 2, HAL_MAX_DELAY);
-    IMU963RA_CS_HIGH();
+    // uint8_t rx[2];
+    
+    spi_transaction_t t = {
+        .length = 8 * sizeof(tx), // bit
+        .tx_buffer = tx,
+    };
+    ESP_ERROR_CHECK(spi_device_transmit(spi, &t));
 }
 
 static uint8_t imu963ra_spi_read_reg(uint8_t reg)
 {
     uint8_t tx[2] = { reg, 0x00 };
     uint8_t rx[2] = { 0 };
-    IMU963RA_CS_LOW();
-    HAL_SPI_TransmitReceive(&hspi6, tx, rx, 2, HAL_MAX_DELAY);
-    IMU963RA_CS_HIGH();
+    
+    spi_transaction_t t = {
+        .length = 8 * sizeof(tx), // bit
+        .tx_buffer = tx,
+        .rx_buffer = rx,
+    };
+    ESP_ERROR_CHECK(spi_device_transmit(spi, &t));
     return rx[1];
 }
 
@@ -38,9 +49,13 @@ static void imu963ra_spi_read_regs(uint8_t reg, uint8_t *buf, uint32_t len)
     tx_buf[0] = reg;
     for (uint32_t i = 1; i <= len; i++)
         tx_buf[i] = 0x00;
-    IMU963RA_CS_LOW();
-    HAL_SPI_TransmitReceive(&hspi6, tx_buf, rx_buf, 1 + len, HAL_MAX_DELAY);
-    IMU963RA_CS_HIGH();
+    
+    spi_transaction_t t = {
+        .length = 8 * (len + 1), // bit
+        .tx_buffer = tx_buf,
+        .rx_buffer = rx_buf,
+    };
+    ESP_ERROR_CHECK(spi_device_transmit(spi, &t));
     for (uint32_t i = 0; i < len; i++)
         buf[i] = rx_buf[i + 1];
 }
@@ -70,7 +85,7 @@ static uint8_t imu963ra_write_mag_register(uint8_t addr, uint8_t reg, uint8_t da
             return_state = 1;
             break;
         }
-        osDelay(2);
+        vTaskDelay(pdMS_TO_TICKS(2));
     }
     return return_state;
 }
@@ -91,7 +106,7 @@ static uint8_t imu963ra_read_mag_register(uint8_t addr, uint8_t reg)
         {
             break;
         }
-        osDelay(2);
+        vTaskDelay(pdMS_TO_TICKS(2));
     }
 
     return imu963ra_read_acc_gyro_register(IMU963RA_SENSOR_HUB_1);
@@ -120,7 +135,7 @@ static uint8_t imu963ra_acc_gyro_self_check(void)
             break;
         }
         dat = imu963ra_read_acc_gyro_register(IMU963RA_WHO_AM_I);
-        osDelay(10);
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
     return return_state;
 }
@@ -139,7 +154,7 @@ static uint8_t imu963ra_mag_self_check(void)
             break;
         }
         dat = imu963ra_read_mag_register(IMU963RA_MAG_ADDR, IMU963RA_MAG_CHIP_ID);
-        osDelay(10);
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
     return return_state;
 }
@@ -190,14 +205,33 @@ static bool imu_initialized = false;
 
 exit_code_t imu963ra_init(void)
 {
+    spi_bus_config_t buscfg = {
+        .mosi_io_num = IMU963RA_MOSI_PIN,
+        .miso_io_num = IMU963RA_MISO_PIN,
+        .sclk_io_num = IMU963RA_SCK_PIN,
+        .quadwp_io_num = -1,
+        .quadhd_io_num = -1,
+        .max_transfer_sz = 4096
+    };
+
+    ESP_ERROR_CHECK(spi_bus_initialize(SPI2_HOST, &buscfg, SPI_DMA_CH_AUTO));
+    spi_device_interface_config_t devcfg = {
+        .clock_speed_hz = 10 * 1000 * 1000,  // 10MHz
+        .mode = 0,                            // SPI模式0~3
+        .spics_io_num = IMU963RA_CS_PIN,     // CS脚
+        .queue_size = 3,
+    };
+    ESP_ERROR_CHECK(spi_bus_add_device(SPI2_HOST, &devcfg, &spi));
+
+
     uint8_t return_state = 0;
-    osDelay(10);
+    vTaskDelay(10);
 
     do
     {
         imu963ra_write_acc_gyro_register(IMU963RA_FUNC_CFG_ACCESS, 0x00);
         imu963ra_write_acc_gyro_register(IMU963RA_CTRL3_C, 0x01);
-        osDelay(2);
+        vTaskDelay(2);
         imu963ra_write_acc_gyro_register(IMU963RA_FUNC_CFG_ACCESS, 0x00);
         if (imu963ra_acc_gyro_self_check())
         {
@@ -272,14 +306,14 @@ exit_code_t imu963ra_init(void)
 
         imu963ra_write_acc_gyro_register(IMU963RA_FUNC_CFG_ACCESS, 0x40);
         imu963ra_write_acc_gyro_register(IMU963RA_MASTER_CONFIG, 0x80);
-        osDelay(2);
+        vTaskDelay(2);
         imu963ra_write_acc_gyro_register(IMU963RA_MASTER_CONFIG, 0x00);
-        osDelay(2);
+        vTaskDelay(2);
 
         imu963ra_write_mag_register(IMU963RA_MAG_ADDR, IMU963RA_MAG_CONTROL2, 0x80);
-        osDelay(2);
+        vTaskDelay(2);
         imu963ra_write_mag_register(IMU963RA_MAG_ADDR, IMU963RA_MAG_CONTROL2, 0x00);
-        osDelay(2);
+        vTaskDelay(2);
 
         if (imu963ra_mag_self_check())
         {
@@ -306,7 +340,7 @@ exit_code_t imu963ra_init(void)
         imu963ra_write_mag_register(IMU963RA_MAG_ADDR, IMU963RA_MAG_FBR, 0x01);
         imu963ra_connect_mag(IMU963RA_MAG_ADDR, IMU963RA_MAG_OUTX_L);
         imu963ra_write_acc_gyro_register(IMU963RA_FUNC_CFG_ACCESS, 0x00);
-        osDelay(20);
+        vTaskDelay(20);
 
     } while (0);
 

@@ -7,6 +7,7 @@
 
 #include "driver/gpio.h"
 
+#include "esp_console.h"
 
 void led_task(void *pvParameter)
 {
@@ -60,7 +61,6 @@ led_strip_config_t strip_config = {
 void app_main(void)
 {
     xTaskCreatePinnedToCore(led_task, "led_task", 4096, NULL, 5, NULL, 1);
-    static int count = 0;
     while (1) {
         // ESP_LOGI("main", "Main task running... Count: %d", count++);
         vTaskDelay(pdTICKS_TO_MS(10));
