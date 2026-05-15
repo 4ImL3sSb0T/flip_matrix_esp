@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include "FreeRTOS/FreeRTOS.h"
+#include "freertos/FreeRTOS.h"
 #include "service/tools/common_def.h"
 
 exit_code_t uart_async_init(void);

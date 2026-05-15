@@ -4,7 +4,7 @@
 #include "led_strip_rmt.h"
 
 #ifndef MATRIX_MAX_LEDS
-  #define MATRIX_MAX_LEDS 256
+#define MATRIX_MAX_LEDS 256
 #endif
 
 static matrix_config_t matrix_cfg;

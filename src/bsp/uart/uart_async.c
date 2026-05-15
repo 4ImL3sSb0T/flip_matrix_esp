@@ -20,11 +20,11 @@ static int TX_PIN = GPIO_NUM_10;
 
 static QueueHandle_t uart_queue;
 
+const char *TAG = "uart_async";
 
-static StreamBufferHandle_t uart_tx_stream_buffer = NULL;
 static StreamBufferHandle_t uart_rx_stream_buffer = NULL;
 
-static TaskHandle_t uart_async_tx_task_handle = NULL;
+static TaskHandle_t uart_async_rx_task_handle = NULL;
 
 // 唐完了，这里要加互斥锁,AI瞎jb说,StreamBuffer不支持多任务写入
 static SemaphoreHandle_t uart_rx_mutex = NULL;
@@ -57,24 +57,24 @@ void uart_async_rx_task(void *param) {
                 break;
 
             case UART_FIFO_OVF:
-                ESP_LOGW("uart_async", "FIFO overflow");
+                ESP_LOGW(TAG, "FIFO overflow");
                 rx_errors++;
                 uart_flush_input(UART_NUM_1);
                 xQueueReset(uart_queue);
                 break;
 
             case UART_FRAME_ERR:
-                ESP_LOGW("uart_async", "frame error");
+                ESP_LOGW(TAG, "frame error");
                 rx_errors++;
                 break;
 
             case UART_PARITY_ERR:
-                ESP_LOGW("uart_async", "parity error");
+                ESP_LOGW(TAG, "parity error");
                 rx_errors++;
                 break;
 
             case UART_BREAK:
-                ESP_LOGW("uart_async", "break detected");
+                ESP_LOGW(TAG, "break detected");
                 rx_errors++;
                 break;
 
@@ -112,15 +112,14 @@ exit_code_t uart_async_init(void)
 exit_code_t uart_async_deinit(void)
 {
     ESP_ERROR_CHECK(uart_driver_delete(UART_NUM_1));
-    vStreamBufferDelete(uart_tx_stream_buffer);
     vStreamBufferDelete(uart_rx_stream_buffer);
     vSemaphoreDelete(uart_rx_mutex);
     return EXIT_OK;
 }
 
 exit_code_t uart_async_start() {
-    if (uart_tx_stream_buffer == NULL || uart_rx_stream_buffer == NULL || uart_rx_mutex == NULL) return EXIT_FAIL;
-    const BaseType_t xTaskCreate_status = xTaskCreate(uart_async_rx_task, "uart_async_rx_task", 256, NULL, 24, &uart_async_tx_task_handle);
+    if (uart_rx_stream_buffer == NULL || uart_rx_mutex == NULL) return EXIT_FAIL;
+    const BaseType_t xTaskCreate_status = xTaskCreate(uart_async_rx_task, "uart_async_rx_task", 256, NULL, 24, &uart_async_rx_task_handle);
 
     if (xTaskCreate_status != pdPASS) return EXIT_FAIL;
     return EXIT_OK;
