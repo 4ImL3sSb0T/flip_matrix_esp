@@ -14,7 +14,7 @@
 #define FILL_RATIO     0.6f
 #define SIM_DT         0.016f
 
-#define TASK_STACK     1024
+#define TASK_STACK     4096
 #define TASK_PRIORITY  10
 
 /* -------------------------------------------------------------------------- */

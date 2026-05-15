@@ -4,10 +4,16 @@
 #include "led_strip.h"
 #include "led_strip_rmt.h"
 #include "esp_log.h"
-
 #include "driver/gpio.h"
-
 #include "esp_console.h"
+
+#include "bsp/uart/uart_async.h"
+#include "service/cli/port/shell_port.h"
+#include "app/app_water_sim.h"
+#include "service/matrix/matrix.h"
+#include "service/imu/imu_service.h"
+#include "bsp/imu963ra/zf_device_imu963ra.h"
+
 
 void led_task(void *pvParameter)
 {
@@ -57,10 +63,40 @@ void led_task(void *pvParameter)
     }
 }
 
+void start_flip_task(void *pvParameter)
+{
+    uart_async_init();
+    uart_async_start();
+    shell_port_init();
+    shell_port_start();
+
+    static imu_sensor_t imu963ra_sensor = {
+        .imu_init = imu963ra_init,
+        .imu_deinit = imu963ra_deinit,
+        .imu_get_acc = imu963ra_read_acc,
+        .imu_get_gyro = imu963ra_read_gyro,
+        .imu_get_mag = imu963ra_read_mag,
+        .is_initialized = false,
+    };
+    imu_service_init(&imu963ra_sensor);
+    imu_service_start();
+
+    app_water_sim_init();
+    app_water_sim_start();
+
+    while (1) {
+        vec3f euler;
+        imu_service_get_euler(&euler);
+        ESP_LOGI("IMU", "Euler angles: Roll: %.2f, Pitch: %.2f, Yaw: %.2f", euler.x, euler.y, euler.z);
+        vTaskDelay(pdTICKS_TO_MS(200));
+    }
+}
+
 
 void app_main(void)
 {
-    xTaskCreatePinnedToCore(led_task, "led_task", 4096, NULL, 5, NULL, 1);
+    // xTaskCreatePinnedToCore(led_task, "led_task", 4096, NULL, 5, NULL, 1);
+    xTaskCreatePinnedToCore(start_flip_task, "flip_task", 4096, NULL, 5, NULL, 1);
     while (1) {
         // ESP_LOGI("main", "Main task running... Count: %d", count++);
         vTaskDelay(pdTICKS_TO_MS(10));
