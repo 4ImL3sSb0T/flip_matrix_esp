@@ -11,7 +11,7 @@
 
 void led_task(void *pvParameter)
 {
-led_strip_config_t strip_config = {
+    led_strip_config_t strip_config = {
         .strip_gpio_num = GPIO_NUM_48, // The GPIO that connected to the LED strip's data line
         .max_leds = 1,      // The number of LEDs in the strip,
         .led_model = LED_MODEL_WS2812,        // LED strip model

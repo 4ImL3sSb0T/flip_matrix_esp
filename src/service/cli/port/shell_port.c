@@ -2,9 +2,9 @@
 #include "service/cli/shell.h"
 #include "service/cli/log/log.h"
 #include "bsp/uart/uart_async.h"
-#include "FreeRTOS.h"
-#include "task.h"
-#include "semphr.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
 
 #define SHELL_TASK_STACK_SIZE 256
 #define SHELL_TASK_PRIORITY   20

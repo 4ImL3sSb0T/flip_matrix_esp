@@ -1,5 +1,5 @@
-#include "FreeRTOS.h"
-#include "task.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "service/cli/shell.h"
 #include "service/cli/log/log.h"
 

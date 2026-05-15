@@ -18,6 +18,8 @@ extern "C" {
 
 typedef struct FlipFluid FlipFluid;
 
+#define LED_VAL_MAX_F 20.0f
+
 FlipFluid* flip_create(float sim_w, float sim_h, int visible_res,
                        float fill_ratio);
 void flip_destroy(FlipFluid* f);
@@ -29,6 +31,11 @@ void flip_get_led_grid(const FlipFluid* f, float* out_grid);
 void flip_set_gravity_scale(FlipFluid* f, float gravity_scale);
 void flip_set_solver_quality(FlipFluid* f, int push_iters, int pressure_iters,
                              float flip_ratio);
+
+float flip_get_gravity_scale(const FlipFluid* f);
+int flip_get_push_iters(const FlipFluid* f);
+int flip_get_pressure_iters(const FlipFluid* f);
+float flip_get_flip_ratio(const FlipFluid* f);
 
 #ifdef __cplusplus
 }

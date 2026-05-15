@@ -11,6 +11,7 @@ typedef enum {
 typedef struct {
   uint32_t rows;
   uint32_t cols;
+  int gpio_num;
   matrix_topo_t topology;
 } matrix_config_t;
 

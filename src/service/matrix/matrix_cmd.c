@@ -5,15 +5,16 @@
 
 int mtrx_init(int argc, char *argv[])
 {
-  if (argc < 3) {
-    logWarning("usage: mtrx_init <rows> <cols> [topo=0|1]");
+  if (argc < 4) {
+    logWarning("usage: mtrx_init <rows> <cols> <gpio> [topo=0|1]");
     return -1;
   }
 
   matrix_config_t cfg = {
     .rows = (uint32_t)atoi(argv[1]),
     .cols = (uint32_t)atoi(argv[2]),
-    .topology = (argc > 3) ? (matrix_topo_t)atoi(argv[3]) : MATRIX_TOPO_PROGRESSIVE,
+    .gpio_num = atoi(argv[3]),
+    .topology = (argc > 4) ? (matrix_topo_t)atoi(argv[4]) : MATRIX_TOPO_PROGRESSIVE,
   };
 
   exit_code_t ret = matrix_init(&cfg);
@@ -25,7 +26,7 @@ int mtrx_init(int argc, char *argv[])
 }
 SHELL_EXPORT_CMD(
 SHELL_CMD_PERMISSION(0)|SHELL_CMD_TYPE(SHELL_TYPE_CMD_MAIN)|SHELL_CMD_DISABLE_RETURN,
-mtrx_init, mtrx_init, init matrix\r\nmtrx_init <rows> <cols> [topo]);
+mtrx_init, mtrx_init, init matrix\r\nmtrx_init <rows> <cols> <gpio> [topo]);
 
 
 int mtrx_deinit(int argc, char *argv[])

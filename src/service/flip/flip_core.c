@@ -28,7 +28,6 @@ Modifications/port to C:
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #endif
 
-#define LED_VAL_MAX_F 20.0f
 #define DENSITY_CLAMP_F 1.2f
 #define GAMMA_F 0.6f
 
@@ -742,3 +741,8 @@ void flip_get_led_grid(const FlipFluid* f, float* out_grid) {
     int visible_y = f->f_num_y - 2;
     get_led_grid(f, out_grid, visible_x, visible_y);
 }
+
+float flip_get_gravity_scale(const FlipFluid* f) { return f ? f->gravity_scale : 0.0f; }
+int flip_get_push_iters(const FlipFluid* f) { return f ? f->push_iters : 0; }
+int flip_get_pressure_iters(const FlipFluid* f) { return f ? f->pressure_iters : 0; }
+float flip_get_flip_ratio(const FlipFluid* f) { return f ? f->flip_ratio : 0.0f; }

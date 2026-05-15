@@ -1,8 +1,9 @@
 #include "app_water_sim.h"
 
-#include "FreeRTOS.h/FreeRTOS.h"
+#include "freertos/FreeRTOS.h"
 #include <math.h>
 #include "service/imu/imu_service.h"
+#include "service/cli/log/log.h"
 
 /* -------------------------------------------------------------------------- */
 /* 仿真默认参数                                                                 */
@@ -121,6 +122,7 @@ exit_code_t app_water_sim_init(void) {
     const matrix_config_t mcfg = {
         .rows      = VISIBLE_RES,
         .cols      = VISIBLE_RES,
+        .gpio_num  = 48,
         .topology  = MATRIX_TOPO_PROGRESSIVE,
     };
     exit_code_t ret = matrix_init(&mcfg);
@@ -185,11 +187,11 @@ void app_water_sim_set_brightness(float percent) {
 
 void app_water_sim_status(void) {
     static const char *scheme_names[] = {"blue", "rainbow", "grayscale"};
-    logInfo("gravity_scale: %.2f", s_fluid ? s_fluid->gravity_scale : 0.0f);
+    logInfo("gravity_scale: %.2f", flip_get_gravity_scale(s_fluid));
     logInfo("solver: push=%d pressure=%d flip=%.2f",
-            s_fluid ? s_fluid->push_iters : 0,
-            s_fluid ? s_fluid->pressure_iters : 0,
-            s_fluid ? s_fluid->flip_ratio : 0.0f);
+            flip_get_push_iters(s_fluid),
+            flip_get_pressure_iters(s_fluid),
+            flip_get_flip_ratio(s_fluid));
     logInfo("dt: %.4f s (%.0f Hz)", s_dt, 1.0f / s_dt);
     logInfo("color: %s (%d)", scheme_names[s_color_scheme], (int)s_color_scheme);
     logInfo("brightness: %.0f%%", s_brightness * 100.0f);
