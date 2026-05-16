@@ -102,3 +102,8 @@ void app_main(void)
         vTaskDelay(pdTICKS_TO_MS(10));
     }
 }
+
+void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
+{
+    esp_system_abort("stack overflow");
+}

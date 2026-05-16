@@ -27,7 +27,7 @@ static StreamBufferHandle_t uart_rx_stream_buffer = NULL;
 static TaskHandle_t uart_async_rx_task_handle = NULL;
 
 // 唐完了，这里要加互斥锁,AI瞎jb说,StreamBuffer不支持多任务写入
-static SemaphoreHandle_t uart_rx_mutex = NULL;
+// static SemaphoreHandle_t uart_tx_mutex = NULL;
 
 static volatile uint16_t rx_last_pos = 0;
 static volatile uint32_t rx_errors = 0;
@@ -44,11 +44,13 @@ void uart_async_rx_task(void *param) {
             switch (event.type) {
             case UART_DATA:
                 if (event.size > 0) {
-                    const int len = uart_read_bytes(UART_NUM_1, tmp_buf, event.size, pdMS_TO_TICKS(20));
+                    int to_read = event.size;
+                    if (to_read > sizeof(tmp_buf)) to_read = sizeof(tmp_buf);
+                    int len = uart_read_bytes(UART_NUM_1, tmp_buf, to_read, pdMS_TO_TICKS(20));
                     if (len > 0) {
-                        xSemaphoreTake(uart_rx_mutex, portMAX_DELAY);
+                        // xSemaphoreTake(uart_tx_mutex, portMAX_DELAY);
                         const size_t sent = xStreamBufferSend(uart_rx_stream_buffer, tmp_buf, len, 0);
-                        xSemaphoreGive(uart_rx_mutex);
+                        // xSemaphoreGive(uart_tx_mutex);
                         if (sent < (size_t)len) {
                             rx_dropped += len - sent;
                         }
@@ -103,23 +105,24 @@ exit_code_t uart_async_init(void)
 
     ESP_ERROR_CHECK(uart_driver_install(UART_NUM_1, UART_ASYNC_RX_DMA_BUFFER_SIZE, UART_ASYNC_TX_DMA_BUFFER_SIZE, EVENT_QUEUE_SIZE, &uart_queue, 0));
 
-    uart_rx_stream_buffer = xStreamBufferCreate(UART_ASYNC_RX_STREAM_BUFFER_SIZE, sizeof(uint8_t));
-    uart_rx_mutex = xSemaphoreCreateMutex();
+    uart_rx_stream_buffer = xStreamBufferCreate(UART_ASYNC_RX_STREAM_BUFFER_SIZE, 64 * sizeof(uint8_t));
+    // uart_tx_mutex = xSemaphoreCreateMutex();
 
     return EXIT_OK;
 }
 
 exit_code_t uart_async_deinit(void)
 {
+    vTaskDelete(uart_async_rx_task_handle);
     ESP_ERROR_CHECK(uart_driver_delete(UART_NUM_1));
     vStreamBufferDelete(uart_rx_stream_buffer);
-    vSemaphoreDelete(uart_rx_mutex);
+    // vSemaphoreDelete(uart_tx_mutex);
     return EXIT_OK;
 }
 
 exit_code_t uart_async_start() {
-    if (uart_rx_stream_buffer == NULL || uart_rx_mutex == NULL) return EXIT_FAIL;
-    const BaseType_t xTaskCreate_status = xTaskCreate(uart_async_rx_task, "uart_async_rx_task", 256, NULL, 24, &uart_async_rx_task_handle);
+    if (uart_rx_stream_buffer == NULL) return EXIT_FAIL;
+    const BaseType_t xTaskCreate_status = xTaskCreate(uart_async_rx_task, "uart_async_rx_task", 4096, NULL, 24, &uart_async_rx_task_handle);
 
     if (xTaskCreate_status != pdPASS) return EXIT_FAIL;
     return EXIT_OK;
@@ -137,8 +140,8 @@ exit_code_t uart_async_write(const uint8_t* data, const uint32_t len, const Tick
 }
 
 size_t uart_async_read(uint8_t* data, const uint32_t len, const TickType_t timeout) {
-    xSemaphoreTake(uart_rx_mutex, portMAX_DELAY);
+    // xSemaphoreTake(uart_tx_mutex, portMAX_DELAY);
     const size_t received = xStreamBufferReceive(uart_rx_stream_buffer, data, len, timeout);
-    xSemaphoreGive(uart_rx_mutex);
+    // xSemaphoreGive(uart_tx_mutex);
     return received;
 }
