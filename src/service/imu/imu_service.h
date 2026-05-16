@@ -5,8 +5,23 @@
 #include "service/tools/common_def.h"
 #include "FreeRTOS/FreeRTOS.h"
 #include "freertos/queue.h"
+#include "freertos/event_groups.h"
+
+#include "service/event_bus/event_bus.h"
 
 extern QueueHandle_t imu_data_queue;
+extern EventBits_t imu_event_group;
+extern uint16_t IMU_EVENT_BASE_ID;
+
+typedef enum : uint32_t
+{
+    IMU_EVENT_STATIC,
+    IMU_EVENT_DYNAMIC,
+    IMU_EVENT_SHAKING,
+    IMU_EVENT_FALLING,
+    IMU_EVENT_RISING,
+    IMU_EVENT_FLIP,
+} imu_event_bits_t;
 
 typedef struct {
     vec3f acc;
