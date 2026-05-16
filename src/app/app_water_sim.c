@@ -98,7 +98,7 @@ static void water_sim_task(void *param) {
     for (;;) {
         float dt = s_dt;
         vec3f acc, gyro, meg;
-        imu_service_get_sensor(&acc, &gyro, &meg);
+        imu_service_get_raw_data(&acc, &gyro, &meg);
 
         float gx = acc.x;
         float gy = acc.y;

@@ -3,6 +3,17 @@
 
 #include  "service/tools/vec_math.h"
 #include "service/tools/common_def.h"
+#include "FreeRTOS/FreeRTOS.h"
+#include "freertos/queue.h"
+
+extern QueueHandle_t imu_data_queue;
+
+typedef struct {
+    vec3f acc;
+    vec3f gyro;
+    vec3f mag;
+    vec3f euler;
+} imu_data_t;
 
 typedef struct
 {
@@ -20,12 +31,14 @@ typedef enum
     IMU_SERVICE_WITHOUT_MAG = 1
 } imu_mode_t;
 
+
 exit_code_t imu_service_init(imu_sensor_t* imu_sensor);
 exit_code_t imu_service_start();
 exit_code_t imu_service_deinit();
 
 exit_code_t imu_service_get_euler(vec3f* euler);
-exit_code_t imu_service_get_sensor(vec3f* acc, vec3f* gyro, vec3f* mag);
+exit_code_t imu_service_get_raw_data(vec3f* acc, vec3f* gyro, vec3f* mag);
+exit_code_t imu_service_get_data(imu_data_t* data);
 
 imu_mode_t imu_service_get_mode();
 exit_code_t imu_service_set_mode(imu_mode_t mode);

@@ -5,11 +5,13 @@
 #include "FreeRTOS/semphr.h"
 
 SemaphoreHandle_t imu_sensor_handler_semaphore;
+QueueHandle_t imu_data_queue;
 
 static imu_sensor_t* imu_sensor_handler = NULL;
 static imu_mode_t imu_mode = IMU_SERVICE_WITHOUT_MAG;
 static vec3f euler_angle = {0.0f, 0.0f, 0.0f};
 static TaskHandle_t imu_service_task_handle = NULL;
+static int queue_size = 1;
 
 exit_code_t imu_service_init(imu_sensor_t* imu_sensor) {
     if (imu_sensor == NULL || imu_sensor->imu_init == NULL || imu_sensor->imu_get_acc == NULL ||
@@ -18,30 +20,30 @@ exit_code_t imu_service_init(imu_sensor_t* imu_sensor) {
     imu_sensor_handler->imu_init();
     imu_sensor_handler->is_initialized = true;
     imu_sensor_handler_semaphore = xSemaphoreCreateMutex();
+    imu_data_queue = xQueueCreate(queue_size, sizeof(imu_data_t));
     return EXIT_OK;
 }
 void imu_service_task(void* dt) {
     if (imu_sensor_handler == NULL) return;
     TickType_t ticks = xTaskGetTickCount();
     while (1) {
-
-        vec3f acc, gyro, mag;
+        imu_data_t imu_data;
         xSemaphoreTake(imu_sensor_handler_semaphore, portMAX_DELAY);
-        imu_sensor_handler->imu_get_acc(&acc);
-        imu_sensor_handler->imu_get_gyro(&gyro);
-        imu_sensor_handler->imu_get_mag(&mag);
+        imu_sensor_handler->imu_get_acc(&imu_data.acc);
+        imu_sensor_handler->imu_get_gyro(&imu_data.gyro);
+        imu_sensor_handler->imu_get_mag(&imu_data.mag);
         xSemaphoreGive(imu_sensor_handler_semaphore);
-
         switch (imu_mode)
         {
             case IMU_SERVICE_WITHOUT_MAG:
-                MadgwickAHRSupdateIMU(gyro.x, gyro.y, gyro.z, acc.x, acc.y, acc.z);
+                MadgwickAHRSupdateIMU(imu_data.gyro.x, imu_data.gyro.y, imu_data.gyro.z, imu_data.acc.x, imu_data.acc.y, imu_data.acc.z);
                 break;
             case IMU_SERVICE_WITH_MAG:
-                MadgwickAHRSupdate(gyro.x, gyro.y, gyro.z, acc.x, acc.y, acc.z, mag.x, mag.y, mag.z);
+                MadgwickAHRSupdate(imu_data.gyro.x, imu_data.gyro.y, imu_data.gyro.z, imu_data.acc.x, imu_data.acc.y, imu_data.acc.z, imu_data.mag.x, imu_data.mag.y, imu_data.mag.z);
                 break;
         }
-
+        MadgwickAHRS_getEuler(&imu_data.euler.x, &imu_data.euler.y, &imu_data.euler.z);
+        xQueueOverwrite(imu_data_queue, &imu_data);
         vTaskDelayUntil(&ticks, 5);
     }
 
@@ -56,20 +58,29 @@ exit_code_t imu_service_start() {
 
 exit_code_t imu_service_get_euler(vec3f* euler) {
     if (imu_sensor_handler == NULL) return EXIT_NOT_INITIALIZED;
-    MadgwickAHRS_getEuler(&euler->x, &euler->y, &euler->z);
+    imu_data_t imu_data;
+    xQueuePeek(imu_data_queue, &imu_data, portMAX_DELAY);
+    if (euler) *euler = imu_data.euler;
     return EXIT_OK;
 }
-exit_code_t imu_service_get_sensor(vec3f* acc, vec3f* gyro, vec3f* mag) {
+exit_code_t imu_service_get_raw_data(vec3f* acc, vec3f* gyro, vec3f* mag) {
     if (imu_sensor_handler == NULL) return EXIT_NOT_INITIALIZED;
-    xSemaphoreTake(imu_sensor_handler_semaphore, portMAX_DELAY);
-    imu_sensor_handler->imu_get_acc(acc);
-    imu_sensor_handler->imu_get_gyro(gyro);
-    imu_sensor_handler->imu_get_mag(mag);
-    xSemaphoreGive(imu_sensor_handler_semaphore);
+    imu_data_t imu_data;
+    xQueuePeek(imu_data_queue, &imu_data, portMAX_DELAY);
+    if (acc) *acc = imu_data.acc;
+    if (gyro) *gyro = imu_data.gyro;
+    if (mag) *mag = imu_data.mag;
+    return EXIT_OK;
+}
+exit_code_t imu_service_get_data(imu_data_t *data) {
+	if (imu_sensor_handler == NULL) return EXIT_NOT_INITIALIZED;
+    imu_data_t imu_data;
+    xQueuePeek(imu_data_queue, &imu_data, portMAX_DELAY);
+    if (data) *data = imu_data;
     return EXIT_OK;
 }
 exit_code_t imu_service_deinit() {
-    if (imu_sensor_handler == NULL || imu_sensor_handler->imu_deinit == NULL) return EXIT_NOT_INITIALIZED;
+	if (imu_sensor_handler == NULL || imu_sensor_handler->imu_deinit == NULL) return EXIT_NOT_INITIALIZED;
     vTaskDelete(imu_service_task_handle);
     xSemaphoreTake(imu_sensor_handler_semaphore, portMAX_DELAY);
     imu_sensor_handler->imu_deinit();
