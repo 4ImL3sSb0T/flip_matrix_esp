@@ -225,13 +225,13 @@ exit_code_t imu963ra_init(void)
 
 
     uint8_t return_state = 0;
-    vTaskDelay(10);
+    vTaskDelay(pdMS_TO_TICKS(10));
 
     do
     {
         imu963ra_write_acc_gyro_register(IMU963RA_FUNC_CFG_ACCESS, 0x00);
         imu963ra_write_acc_gyro_register(IMU963RA_CTRL3_C, 0x01);
-        vTaskDelay(2);
+        vTaskDelay(pdMS_TO_TICKS(2));
         imu963ra_write_acc_gyro_register(IMU963RA_FUNC_CFG_ACCESS, 0x00);
         if (imu963ra_acc_gyro_self_check())
         {
@@ -306,14 +306,14 @@ exit_code_t imu963ra_init(void)
 
         imu963ra_write_acc_gyro_register(IMU963RA_FUNC_CFG_ACCESS, 0x40);
         imu963ra_write_acc_gyro_register(IMU963RA_MASTER_CONFIG, 0x80);
-        vTaskDelay(2);
+        vTaskDelay(pdMS_TO_TICKS(2));
         imu963ra_write_acc_gyro_register(IMU963RA_MASTER_CONFIG, 0x00);
-        vTaskDelay(2);
+        vTaskDelay(pdMS_TO_TICKS(2));
 
         imu963ra_write_mag_register(IMU963RA_MAG_ADDR, IMU963RA_MAG_CONTROL2, 0x80);
-        vTaskDelay(2);
+        vTaskDelay(pdMS_TO_TICKS(2));
         imu963ra_write_mag_register(IMU963RA_MAG_ADDR, IMU963RA_MAG_CONTROL2, 0x00);
-        vTaskDelay(2);
+        vTaskDelay(pdMS_TO_TICKS(2));
 
         if (imu963ra_mag_self_check())
         {
@@ -340,7 +340,7 @@ exit_code_t imu963ra_init(void)
         imu963ra_write_mag_register(IMU963RA_MAG_ADDR, IMU963RA_MAG_FBR, 0x01);
         imu963ra_connect_mag(IMU963RA_MAG_ADDR, IMU963RA_MAG_OUTX_L);
         imu963ra_write_acc_gyro_register(IMU963RA_FUNC_CFG_ACCESS, 0x00);
-        vTaskDelay(20);
+        vTaskDelay(pdMS_TO_TICKS(20));
 
     } while (0);
 
