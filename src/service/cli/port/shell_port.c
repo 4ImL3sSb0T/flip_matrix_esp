@@ -6,7 +6,7 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 
-#define SHELL_TASK_STACK_SIZE 256
+#define SHELL_TASK_STACK_SIZE 4096
 #define SHELL_TASK_PRIORITY   20
 #define SHELL_READ_TIMEOUT_MS 100
 

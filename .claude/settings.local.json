@@ -3,7 +3,12 @@
     "allow": [
       "Bash(Get-ChildItem -Path \"D:\\\\Project\\\\Esp32s3_LEDPan\\\\src\" -Recurse -Name)",
       "Bash(Select-Object -First 80)",
-      "Skill(code-review:code-review)"
+      "Skill(code-review:code-review)",
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "mcp__plugin_context7_context7__get-library-docs",
+      "Read(//c/Espressif/**)",
+      "Read(//d/Espressif/**)",
+      "Read(//d/Software/Esp/v5.5.4/esp-idf/components/driver/**)"
     ]
   }
 }
