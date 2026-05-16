@@ -101,10 +101,6 @@ void app_main(void)
     while (1) {
         // ESP_LOGI("main", "Main task running... Count: %d", count++);
         vTaskDelay(pdTICKS_TO_MS(10));
-        const char *data = "Hello, UART!\n";
-        size_t len = strlen(data);
-        size_t sent = uart_write_bytes(UART_NUM_1, data, len);
-        ESP_LOGI("main", "Sent %d bytes to UART", sent);
     }
 }
 

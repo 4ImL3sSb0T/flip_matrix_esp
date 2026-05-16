@@ -7,8 +7,9 @@
 #define UART_RX_BUF_SIZE 2048
 #define UART_TX_BUF_SIZE 2048
 
-static int RX_PIN = GPIO_NUM_9;
-static int TX_PIN = GPIO_NUM_10;
+// PIN9和10不能使用!!!
+static int RX_PIN = GPIO_NUM_5;
+static int TX_PIN = GPIO_NUM_4;
 const char *TAG = "uart_async";
 
 exit_code_t uart_async_init(void)
@@ -47,9 +48,5 @@ exit_code_t uart_async_write(const uint8_t* data, const uint32_t len, const Tick
 
 size_t uart_async_read(uint8_t* data, const uint32_t len, const TickType_t timeout) {
     size_t read_len = uart_read_bytes(UART_NUM_2, data, len, timeout);
-    if (read_len != 0) {
-        ESP_LOGI(TAG, "Read %d bytes:", read_len);
-        ESP_LOG_BUFFER_HEXDUMP(TAG, data, read_len, ESP_LOG_INFO);
-    }
     return read_len;
 }
