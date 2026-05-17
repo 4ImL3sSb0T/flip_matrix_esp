@@ -9,7 +9,7 @@
 
 // 最大订阅者数量（工程可调）
 #define EVENTBUS_MAX_SUBSCRIBERS  32
-#define EVENTBUS_MAX_PAYLOAD_SIZE 64
+// #define EVENTBUS_MAX_PAYLOAD_SIZE 64
 
 typedef struct {
     uint16_t module_id;
@@ -19,8 +19,8 @@ typedef struct {
 typedef struct {
     eventbus_id_t id;
     uint32_t timestamp_ms;
-    uint8_t payload[EVENTBUS_MAX_PAYLOAD_SIZE];
     uint32_t payload_len;
+    uint8_t payload[];
 } eventbus_event_t;
 
 typedef void (*eventbus_handler_t)(const eventbus_event_t *evt, void *user_ctx);
