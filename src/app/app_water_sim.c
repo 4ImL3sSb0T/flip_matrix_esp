@@ -1,9 +1,9 @@
 #include "app_water_sim.h"
-
 #include "freertos/FreeRTOS.h"
 #include <math.h>
 #include "service/imu/imu_service.h"
 #include "service/cli/log/log.h"
+#include "esp_log.h"
 
 /* -------------------------------------------------------------------------- */
 /* 仿真默认参数                                                                 */
@@ -37,6 +37,48 @@ static FlipFluid *s_fluid;
 static TaskHandle_t s_task_handle;
 static float s_led_grid[VISIBLE_RES * VISIBLE_RES];
 
+
+static void imu_event_handler(const eventbus_event_t *evt, void *user_ctx) {
+    if (evt->payload_len != sizeof(imu_data_t)) return;
+    
+    switch (evt->id.event_id) {
+        case IMU_EVENT_SLEEP:
+            ESP_LOGI("app_water_sim", "Received IMU_EVENT_SLEEP");
+            break;
+        case IMU_EVENT_DYNAMIC:
+            ESP_LOGI("app_water_sim", "Received IMU_EVENT_DYNAMIC");
+            // 处理动态事件
+            break;
+        case IMU_EVENT_WAKE_UP:
+            ESP_LOGI("app_water_sim", "Received IMU_EVENT_WAKE_UP");
+            // 处理唤醒事件
+            break;
+        case IMU_EVENT_FALLING:
+            ESP_LOGI("app_water_sim", "Received IMU_EVENT_FALLING");
+            // 处理下落事件
+            break;
+        case IMU_EVENT_RISING:
+            ESP_LOGI("app_water_sim", "Received IMU_EVENT_RISING");
+            // 处理上升事件
+            break;
+        case IMU_EVENT_FLIP:
+            ESP_LOGI("app_water_sim", "Received IMU_EVENT_FLIP");
+            // 处理翻转事件
+            break;
+        case IMU_EVENT_SHAKE:
+            ESP_LOGI("app_water_sim", "Received IMU_EVENT_SHAKE");
+            // 处理摇晃事件
+            break;
+        case IMU_EVENT_TAP:
+            ESP_LOGI("app_water_sim", "Received IMU_EVENT_TAP");
+            // 处理敲击事件
+            break;
+        case IMU_EVENT_ROTATING:
+            ESP_LOGI("app_water_sim", "Received IMU_EVENT_ROTATING");
+            // 处理旋转事件
+            break;
+    }
+}
 /* -------------------------------------------------------------------------- */
 /* 颜色映射                                                                     */
 /* -------------------------------------------------------------------------- */
@@ -136,6 +178,8 @@ exit_code_t app_water_sim_init(void) {
 
     flip_set_solver_quality(s_fluid, 4, 12, 0.6f);
     flip_set_gravity_scale(s_fluid, 9.81f);
+
+    eventbus_subscribe(eventbus_make_event_id(IMU_EVENT_BASE_ID, EVENTBUS_EVENT_ID_ALL), imu_event_handler, NULL);
 
     return EXIT_OK;
 }

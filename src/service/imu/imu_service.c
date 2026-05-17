@@ -93,8 +93,8 @@ static exit_code_t imu_service_dispath_event(const imu_data_t data)
         dynamic_ms = 0;
         shake_ms = 0;
 
-        if (static_ms > 2000) { // 静止超过 2 秒
-            eventbus_publish(eventbus_make_event_id(IMU_EVENT_BASE_ID, IMU_EVENT_LONG_STATIC),
+        if (static_ms > 10000) { // 静止超过 10 秒
+            eventbus_publish(eventbus_make_event_id(IMU_EVENT_BASE_ID, IMU_EVENT_SLEEP),
                              NULL, 0, 0);
             static_ms = 0;
         }

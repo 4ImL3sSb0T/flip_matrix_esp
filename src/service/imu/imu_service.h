@@ -13,9 +13,10 @@ extern QueueHandle_t imu_data_queue;
 extern EventBits_t imu_event_group;
 extern uint16_t IMU_EVENT_BASE_ID;
 
+// 改成状态机+事件发布的方式，减少事件冗余和防抖问题
 typedef enum : uint32_t
 {
-    IMU_EVENT_LONG_STATIC,
+    IMU_EVENT_SLEEP,
     IMU_EVENT_DYNAMIC,
     IMU_EVENT_WAKE_UP,
     IMU_EVENT_FALLING,
