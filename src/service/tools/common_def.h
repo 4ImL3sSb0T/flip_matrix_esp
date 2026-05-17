@@ -5,6 +5,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define PRINT(window, fmt, args...) printf("{"#window"}"fmt"\n", ##args)
+
 #ifdef __cplusplus
 extern "C" {
 #endif

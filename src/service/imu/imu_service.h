@@ -21,6 +21,9 @@ typedef enum : uint32_t
     IMU_EVENT_FALLING,
     IMU_EVENT_RISING,
     IMU_EVENT_FLIP,
+    IMU_EVENT_SHAKE,
+    IMU_EVENT_TAP,
+    IMU_EVENT_ROTATING
 } imu_event_bits_t;
 
 typedef struct {
