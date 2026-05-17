@@ -1,4 +1,5 @@
 #include "event_bus.h"
+#include <string.h>
 
 typedef struct {
     eventbus_id_t id;

@@ -39,8 +39,8 @@ static exit_code_t imu_service_dispath_event(imu_data_t data) {
         flip_counter = 0;
         falling_counter = 0;
         rising_counter = 0;
-        if (static_counter > 10) {
-            eventbus_publish(eventbus_make_event_id(IMU_EVENT_BASE_ID, IMU_EVENT_STATIC), NULL, 0, portMAX_DELAY);
+        if (static_counter > 1000) {
+            eventbus_publish(eventbus_make_event_id(IMU_EVENT_BASE_ID, IMU_EVENT_LONG_STATIC), NULL, 0, portMAX_DELAY);
             static_counter = 0;
         }
     } else if (acc_diff >= acc_threshold_static && acc_diff < acc_threshold_dynamic) {
@@ -62,7 +62,7 @@ static exit_code_t imu_service_dispath_event(imu_data_t data) {
         falling_counter = 0;
         rising_counter = 0;
         if (shaking_counter > 10) {
-            eventbus_publish(eventbus_make_event_id(IMU_EVENT_BASE_ID, IMU_EVENT_SHAKING), NULL, 0, portMAX_DELAY);
+            eventbus_publish(eventbus_make_event_id(IMU_EVENT_BASE_ID, IMU_EVENT_WAKE_UP), NULL, 0, portMAX_DELAY);
             shaking_counter = 0;
         }
     } else if (acc_diff >= acc_threshold_shaking) {
@@ -79,6 +79,7 @@ static exit_code_t imu_service_dispath_event(imu_data_t data) {
     }
 
      // Additional logic for falling and rising events can be implemented here based on specific thresholds and conditions
+    return EXIT_OK;
 }
 
 static void imu_service_task(void* dt) {
@@ -112,8 +113,8 @@ exit_code_t imu_service_init(imu_sensor_t* imu_sensor) {
     if (imu_sensor == NULL || imu_sensor->imu_init == NULL || imu_sensor->imu_get_acc == NULL ||
         imu_sensor->imu_get_gyro == NULL || imu_sensor->imu_get_mag == NULL) return EXIT_INVALID_PARAM;
 
-    IMU_EVENT_BASE_ID = eventbus_allocate_module_id(&IMU_EVENT_BASE_ID);
-    if (IMU_EVENT_BASE_ID == 0) return EXIT_FAIL;
+    exit_code_t ret = eventbus_allocate_module_id(&IMU_EVENT_BASE_ID);
+    if (ret != EXIT_OK) return ret;
     imu_sensor_handler = imu_sensor;
     imu_sensor_handler->imu_init();
     imu_sensor_handler->is_initialized = true;
