@@ -13,19 +13,27 @@ extern QueueHandle_t imu_data_queue;
 extern EventBits_t imu_event_group;
 extern uint16_t IMU_EVENT_BASE_ID;
 
-// 改成状态机+事件发布的方式，减少事件冗余和防抖问题
+// IMU 运行状态（状态机）
+typedef enum {
+    IMU_STATE_IDLE,       // 静止
+    IMU_STATE_ACTIVE,     // 正常运动
+    IMU_STATE_SHAKING,    // 摇晃
+    IMU_STATE_FALLING,    // 自由落体
+    IMU_STATE_ROTATING,   // 高速旋转
+    IMU_STATE_SLEEP,      // 深度休眠（IDLE 持续 10s）
+} imu_state_t;
+
+// 状态转移时发布的事件，TAP/FLIP 为即时检测事件
 typedef enum : uint32_t
 {
-    IMU_EVENT_SLEEP,
-    IMU_EVENT_DYNAMIC,
-    IMU_EVENT_WAKE_UP,
-    IMU_EVENT_FALLING,
-    IMU_EVENT_RISING,
-    IMU_EVENT_FLIP,
-    IMU_EVENT_SHAKE,
-    IMU_EVENT_TAP,
-    IMU_EVENT_ROTATING
-} imu_event_bits_t;
+    IMU_EVENT_SLEEP,      // → SLEEP
+    IMU_EVENT_WAKE_UP,    // SLEEP → ACTIVE
+    IMU_EVENT_FALLING,    // → FALLING
+    IMU_EVENT_FLIP,       // 即时检测
+    IMU_EVENT_SHAKE,      // → SHAKING
+    IMU_EVENT_TAP,        // 即时检测
+    IMU_EVENT_ROTATING    // → ROTATING
+} imu_event_t;
 
 typedef struct {
     vec3f acc;
@@ -59,6 +67,7 @@ exit_code_t imu_service_get_euler(vec3f* euler);
 exit_code_t imu_service_get_raw_data(vec3f* acc, vec3f* gyro, vec3f* mag);
 exit_code_t imu_service_get_data(imu_data_t* data);
 
+imu_state_t imu_service_get_state();
 imu_mode_t imu_service_get_mode();
 exit_code_t imu_service_set_mode(imu_mode_t mode);
 

@@ -39,43 +39,30 @@ static float s_led_grid[VISIBLE_RES * VISIBLE_RES];
 
 
 static void imu_event_handler(const eventbus_event_t *evt, void *user_ctx) {
-    if (evt->payload_len != sizeof(imu_data_t)) return;
+    // if (evt->payload_len != sizeof(imu_data_t)) return;
     
     switch (evt->id.event_id) {
         case IMU_EVENT_SLEEP:
             ESP_LOGI("app_water_sim", "Received IMU_EVENT_SLEEP");
             break;
-        case IMU_EVENT_DYNAMIC:
-            ESP_LOGI("app_water_sim", "Received IMU_EVENT_DYNAMIC");
-            // 处理动态事件
-            break;
         case IMU_EVENT_WAKE_UP:
             ESP_LOGI("app_water_sim", "Received IMU_EVENT_WAKE_UP");
-            // 处理唤醒事件
             break;
         case IMU_EVENT_FALLING:
             ESP_LOGI("app_water_sim", "Received IMU_EVENT_FALLING");
-            // 处理下落事件
-            break;
-        case IMU_EVENT_RISING:
-            ESP_LOGI("app_water_sim", "Received IMU_EVENT_RISING");
-            // 处理上升事件
             break;
         case IMU_EVENT_FLIP:
             ESP_LOGI("app_water_sim", "Received IMU_EVENT_FLIP");
-            // 处理翻转事件
             break;
         case IMU_EVENT_SHAKE:
             ESP_LOGI("app_water_sim", "Received IMU_EVENT_SHAKE");
-            // 处理摇晃事件
             break;
         case IMU_EVENT_TAP:
+            
             ESP_LOGI("app_water_sim", "Received IMU_EVENT_TAP");
-            // 处理敲击事件
             break;
         case IMU_EVENT_ROTATING:
             ESP_LOGI("app_water_sim", "Received IMU_EVENT_ROTATING");
-            // 处理旋转事件
             break;
     }
 }

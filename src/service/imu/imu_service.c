@@ -12,7 +12,7 @@ uint16_t IMU_EVENT_BASE_ID;
 
 static imu_sensor_t* imu_sensor_handler = NULL;
 static imu_mode_t imu_mode = IMU_SERVICE_WITHOUT_MAG;
-static vec3f euler_angle = {0.0f, 0.0f, 0.0f};
+
 static TaskHandle_t imu_service_task_handle = NULL;
 static int queue_size = 1;
 
@@ -20,39 +20,35 @@ const float acc_threshold_static = 0.1f;
 const float acc_threshold_dynamic = 0.5f;
 const float acc_threshold_shaking = 2.0f;
 
+static imu_state_t current_state = IMU_STATE_ACTIVE;
+
 static exit_code_t imu_service_dispath_event(const imu_data_t data)
 {
-    const float dt = 0.005f;   // 5ms, 与 vTaskDelayUntil 匹配
-    const float g_ref = 1.0f;  // 如果你的 acc 单位是 g
+    const float dt = 0.005f;
+    const float g_ref = 1.0f;
 
-    // ====== 参数区（需要你现场调参） ======
-    const float static_acc_th = 0.05f;     // 静止：|acc_mag-1g| < 0.05g
-    const float static_gyro_th = 3.0f;     // 静止：gyro < 3 deg/s
+    // ====== 阈值参数 ======
+    const float static_acc_th = 0.05f;
+    const float static_gyro_th = 3.0f;
+    const float shake_hp_th = 0.6f;
+    const float shake_exit_th = 0.3f;
+    const float tap_hp_th = 1.2f;
+    const float fall_acc_th = 0.25f;
+    const float fall_exit_th = 0.7f;
+    const float rotate_gyro_th = 120.0f;
+    const float rotate_exit_th = 60.0f;
+    const float flip_roll_th = 120.0f;
 
-    const float dynamic_acc_th = 0.15f;    // 动态：|acc_mag-1g| > 0.15g
-    const float shake_hp_th = 0.6f;        // 摇晃：高通加速度幅值阈值
-    const float tap_hp_th = 1.2f;          // 敲击：高通尖峰阈值
-    const float fall_acc_th = 0.25f;       // 跌落：acc_mag < 0.25g
+    const uint32_t tap_cooldown_ms = 200;
+    const uint32_t flip_cooldown_ms = 1000;
+    const uint32_t sleep_hold_ms = 10000;
 
-    const float flip_roll_th = 120.0f;     // 翻转阈值（角度）
-    const float rotate_gyro_th = 120.0f;   // 旋转阈值 deg/s
-
-    // 事件防抖（冷却时间）
-    const uint32_t cooldown_ms = 300;
-
-    // ====== 状态变量 ======
+    // ====== 持久状态 ======
     static float acc_lp = 1.0f;
     static float last_acc_mag = 1.0f;
-
-    static uint32_t static_ms = 0;
-    static uint32_t dynamic_ms = 0;
-    static uint32_t shake_ms = 0;
-
+    static uint32_t idle_ms = 0;
     static uint32_t tap_cooldown = 0;
     static uint32_t flip_cooldown = 0;
-    static uint32_t shake_cooldown = 0;
-    static uint32_t fall_cooldown = 0;
-    static uint32_t rotate_cooldown = 0;
 
     // ====== 数据计算 ======
     float acc_mag = sqrtf(data.acc.x * data.acc.x +
@@ -63,8 +59,7 @@ static exit_code_t imu_service_dispath_event(const imu_data_t data)
                            data.gyro.y * data.gyro.y +
                            data.gyro.z * data.gyro.z);
 
-    // 一阶低通滤波（估计重力基准）
-    const float alpha = 0.05f;  // 0.01~0.1 可调
+    const float alpha = 0.05f;
     acc_lp = acc_lp + alpha * (acc_mag - acc_lp);
 
     float acc_hp = acc_mag - acc_lp;
@@ -74,93 +69,114 @@ static exit_code_t imu_service_dispath_event(const imu_data_t data)
     last_acc_mag = acc_mag;
 
     // ====== 冷却计时 ======
-    if (tap_cooldown)    tap_cooldown -= 5;
-    if (flip_cooldown)   flip_cooldown -= 5;
-    if (shake_cooldown)  shake_cooldown -= 5;
-    if (fall_cooldown)   fall_cooldown -= 5;
-    if (rotate_cooldown) rotate_cooldown -= 5;
+    if (tap_cooldown)  { if (tap_cooldown > 5) tap_cooldown -= 5; else tap_cooldown = 0; }
+    if (flip_cooldown) { if (flip_cooldown > 5) flip_cooldown -= 5; else flip_cooldown = 0; }
 
-    // 防止 underflow
-    if ((int32_t)tap_cooldown < 0) tap_cooldown = 0;
-    if ((int32_t)flip_cooldown < 0) flip_cooldown = 0;
-    if ((int32_t)shake_cooldown < 0) shake_cooldown = 0;
-    if ((int32_t)fall_cooldown < 0) fall_cooldown = 0;
-    if ((int32_t)rotate_cooldown < 0) rotate_cooldown = 0;
-
-    // ====== 1. 静止检测 ======
-    if (acc_diff < static_acc_th && gyro_mag < static_gyro_th) {
-        static_ms += 5;
-        dynamic_ms = 0;
-        shake_ms = 0;
-
-        if (static_ms > 10000) { // 静止超过 10 秒
-            eventbus_publish(eventbus_make_event_id(IMU_EVENT_BASE_ID, IMU_EVENT_SLEEP),
-                             NULL, 0, 0);
-            static_ms = 0;
-        }
-    } else {
-        static_ms = 0;
-    }
-
-    // ====== 2. 普通动态 ======
-    if (acc_diff > dynamic_acc_th || gyro_mag > 30.0f) {
-        dynamic_ms += 5;
-        if (dynamic_ms > 200) { // 动态持续 200ms
-            eventbus_publish(eventbus_make_event_id(IMU_EVENT_BASE_ID, IMU_EVENT_DYNAMIC),
-                             NULL, 0, 0);
-            dynamic_ms = 0;
-        }
-    } else {
-        dynamic_ms = 0;
-    }
-
-    // ====== 3. 摇晃检测（高通加速度持续较大） ======
-    if (fabsf(acc_hp) > shake_hp_th) {
-        shake_ms += 5;
-        if (shake_ms > 150 && shake_cooldown == 0) {
-            eventbus_publish(eventbus_make_event_id(IMU_EVENT_BASE_ID, IMU_EVENT_SHAKE),
-                             NULL, 0, 0);
-            shake_ms = 0;
-            shake_cooldown = cooldown_ms;
-        }
-    } else {
-        shake_ms = 0;
-    }
-
-    // ====== 4. 敲击检测（尖峰） ======
-    // jerk 很大 + 高通幅值很大，基本就是敲击/撞击
-    if (fabsf(acc_hp) > tap_hp_th && fabsf(jerk) > 50.0f && tap_cooldown == 0) {
+    // ====== 即时检测事件（独立于状态机） ======
+    if (fabsf(acc_hp) > tap_hp_th && fabsf(jerk) > 30.0f && tap_cooldown == 0) {
         eventbus_publish(eventbus_make_event_id(IMU_EVENT_BASE_ID, IMU_EVENT_TAP),
                          NULL, 0, 0);
-        tap_cooldown = cooldown_ms;
+        tap_cooldown = tap_cooldown_ms;
     }
 
-    // ====== 5. 自由落体检测 ======
-    if (acc_mag < fall_acc_th && fall_cooldown == 0) {
-        eventbus_publish(eventbus_make_event_id(IMU_EVENT_BASE_ID, IMU_EVENT_FALLING),
-                         NULL, 0, 0);
-        fall_cooldown = 1000;
-    }
-
-    // ====== 6. 旋转检测（gyro大） ======
-    if (gyro_mag > rotate_gyro_th && rotate_cooldown == 0) {
-        eventbus_publish(eventbus_make_event_id(IMU_EVENT_BASE_ID, IMU_EVENT_ROTATING),
-                         NULL, 0, 0);
-        rotate_cooldown = cooldown_ms;
-    }
-
-    // ====== 7. 翻转检测（基于欧拉角 roll/pitch） ======
-    // 你已经有 Madgwick 输出的 euler
     if ((fabsf(data.euler.x) > flip_roll_th || fabsf(data.euler.y) > flip_roll_th) &&
         flip_cooldown == 0)
     {
         eventbus_publish(eventbus_make_event_id(IMU_EVENT_BASE_ID, IMU_EVENT_FLIP),
                          NULL, 0, 0);
-        flip_cooldown = 800;
+        flip_cooldown = flip_cooldown_ms;
     }
 
-    // 调试打印
-    // PRINT(imu, "acc_mag=%.3f acc_hp=%.3f jerk=%.2f gyro=%.2f", acc_mag, acc_hp, jerk, gyro_mag);
+    // ====== 状态机：确定下一状态 ======
+    imu_state_t next_state = current_state;
+    bool is_static = (acc_diff < static_acc_th && gyro_mag < static_gyro_th);
+
+    switch (current_state) {
+    case IMU_STATE_IDLE:
+        if (!is_static) {
+            next_state = IMU_STATE_ACTIVE;
+        }
+        break;
+
+    case IMU_STATE_SLEEP:
+        if (!is_static) {
+            next_state = IMU_STATE_ACTIVE;
+        }
+        break;
+
+    case IMU_STATE_ACTIVE:
+        if (is_static) {
+            next_state = IMU_STATE_IDLE;
+        } else if (acc_mag < fall_acc_th) {
+            next_state = IMU_STATE_FALLING;
+        } else if (fabsf(acc_hp) > shake_hp_th) {
+            next_state = IMU_STATE_SHAKING;
+        } else if (gyro_mag > rotate_gyro_th) {
+            next_state = IMU_STATE_ROTATING;
+        }
+        break;
+
+    case IMU_STATE_SHAKING:
+        if (fabsf(acc_hp) <= shake_exit_th) {
+            next_state = IMU_STATE_ACTIVE;
+        }
+        break;
+
+    case IMU_STATE_FALLING:
+        if (acc_mag > fall_exit_th) {
+            next_state = IMU_STATE_ACTIVE;
+        }
+        break;
+
+    case IMU_STATE_ROTATING:
+        if (gyro_mag < rotate_exit_th) {
+            next_state = IMU_STATE_ACTIVE;
+        }
+        break;
+    }
+
+    // ====== 状态转移：发布事件 ======
+    if (next_state != current_state) {
+        switch (next_state) {
+        case IMU_STATE_IDLE:
+            idle_ms = 0;
+            break;
+        case IMU_STATE_ACTIVE:
+            if (current_state == IMU_STATE_SLEEP) {
+                eventbus_publish(eventbus_make_event_id(IMU_EVENT_BASE_ID, IMU_EVENT_WAKE_UP),
+                                 NULL, 0, 0);
+            }
+            break;
+        case IMU_STATE_SHAKING:
+            eventbus_publish(eventbus_make_event_id(IMU_EVENT_BASE_ID, IMU_EVENT_SHAKE),
+                             NULL, 0, 0);
+            break;
+        case IMU_STATE_FALLING:
+            eventbus_publish(eventbus_make_event_id(IMU_EVENT_BASE_ID, IMU_EVENT_FALLING),
+                             NULL, 0, 0);
+            break;
+        case IMU_STATE_ROTATING:
+            eventbus_publish(eventbus_make_event_id(IMU_EVENT_BASE_ID, IMU_EVENT_ROTATING),
+                             NULL, 0, 0);
+            break;
+        case IMU_STATE_SLEEP:
+            break;
+        }
+        current_state = next_state;
+    }
+
+    // ====== IDLE 持续检测 → SLEEP ======
+    if (current_state == IMU_STATE_IDLE) {
+        idle_ms += 5;
+        if (idle_ms >= sleep_hold_ms) {
+            current_state = IMU_STATE_SLEEP;
+            eventbus_publish(eventbus_make_event_id(IMU_EVENT_BASE_ID, IMU_EVENT_SLEEP),
+                             NULL, 0, 0);
+        }
+    }
+
+    // PRINT(imu, "state=%d acc_mag=%.3f acc_hp=%.3f gyro=%.2f",
+    //       current_state, acc_mag, acc_hp, gyro_mag);
 
     return EXIT_OK;
 }
@@ -243,6 +259,10 @@ exit_code_t imu_service_deinit() {
     imu_sensor_handler->imu_deinit();
     xSemaphoreGive(imu_sensor_handler_semaphore);
     return EXIT_OK;
+}
+
+imu_state_t imu_service_get_state() {
+    return current_state;
 }
 
 imu_mode_t imu_service_get_mode() {
