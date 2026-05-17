@@ -14,6 +14,7 @@
 #include "service/imu/imu_service.h"
 #include "bsp/imu963ra/zf_device_imu963ra.h"
 #include "driver/uart.h"
+#include "service/event_bus/event_bus.h"
 
 void led_task(void *pvParameter)
 {
@@ -94,6 +95,7 @@ void start_flip_task(void *pvParameter)
 
 void app_main(void)
 {
+    eventbus_init(16, 12, 4096);
     uart_async_init();
     uart_async_start();
     // xTaskCreatePinnedToCore(led_task, "led_task", 4096, NULL, 5, NULL, 1);

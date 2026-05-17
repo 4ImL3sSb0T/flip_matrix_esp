@@ -14,6 +14,6 @@
     "--query-driver=**",
     "--compile-commands-dir=d:\\Project\\Esp32s3_LEDPan\\build"
   ],
-  "idf.portWin": "COM21",
-  "idf.flashType": "JTAG"
+  "idf.portWin": "COM16",
+  "idf.flashType": "UART"
 }
