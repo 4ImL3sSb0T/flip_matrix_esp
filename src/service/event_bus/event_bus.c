@@ -21,6 +21,8 @@ static TaskHandle_t s_deinit_waiter = NULL;
 static eventbus_event_t s_poison_evt;
 static eventbus_event_t *const POISON_PTR = &s_poison_evt;
 
+static volatile bool s_running = false;
+
 static uint32_t get_time_ms(void) {
     return (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
 }
@@ -82,12 +84,13 @@ exit_code_t eventbus_init(uint32_t queue_len, UBaseType_t task_prio, uint32_t ta
         s_sub_lock = NULL;
         return EXIT_FAIL;
     }
+    s_running = true;
     return EXIT_OK;
 }
 
-exit_code_t eventbus_deinit() {
+exit_code_t eventbus_deinit() {   
     if (!s_evt_queue) return EXIT_NOT_INITIALIZED;
-
+    s_running = false;
     s_deinit_waiter = xTaskGetCurrentTaskHandle();
 
     // 如果队列满了，丢弃一个旧事件腾空间（并释放内存）
@@ -125,11 +128,13 @@ exit_code_t eventbus_deinit() {
     s_evt_task = NULL;
     s_deinit_waiter = NULL;
 
+
     return EXIT_OK;
 }
 
 exit_code_t eventbus_publish(eventbus_id_t id, const void *payload, uint32_t len, TickType_t timeout) {
     if (!s_evt_queue) return EXIT_NOT_INITIALIZED;
+    if (!s_running) return EXIT_NOT_INITIALIZED;
     // if (len > EVENTBUS_MAX_PAYLOAD_SIZE) return EXIT_INVALID_PARAM;
     // 按实际 payload 长度分配，无 payload 时柔性数组占 0 字节
     eventbus_event_t *evt = pvPortMalloc(sizeof(eventbus_event_t) + len);
