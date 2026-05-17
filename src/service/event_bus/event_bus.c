@@ -44,7 +44,8 @@ static void eventbus_task(void *arg) {
             for (int i = 0; i < EVENTBUS_MAX_SUBSCRIBERS; i++) {
                 if (s_subscribers[i].used &&
                     s_subscribers[i].id.module_id == evt->id.module_id &&
-                    s_subscribers[i].id.event_id  == evt->id.event_id) {
+                    (s_subscribers[i].id.event_id == EVENTBUS_EVENT_ID_ALL ||
+                     s_subscribers[i].id.event_id == evt->id.event_id)) {
                     matched[match_count++] = s_subscribers[i];
                 }
             }

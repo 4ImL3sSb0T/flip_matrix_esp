@@ -9,6 +9,8 @@
 
 // 最大订阅者数量（工程可调）
 #define EVENTBUS_MAX_SUBSCRIBERS  32
+// event_id 通配符：订阅某 module 的全部事件
+#define EVENTBUS_EVENT_ID_ALL     0xFFFF
 // #define EVENTBUS_MAX_PAYLOAD_SIZE 64
 
 typedef struct {
