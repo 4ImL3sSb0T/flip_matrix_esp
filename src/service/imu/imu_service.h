@@ -24,6 +24,7 @@ typedef enum {
 } imu_state_t;
 
 // 状态转移时发布的事件，TAP/FLIP 为即时检测事件
+// 所有事件 payload 均为 imu_data_t
 typedef enum : uint32_t
 {
     IMU_EVENT_SLEEP,      // → SLEEP

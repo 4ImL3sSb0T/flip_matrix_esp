@@ -75,7 +75,7 @@ static exit_code_t imu_service_dispath_event(const imu_data_t data)
     // ====== 即时检测事件（独立于状态机） ======
     if (fabsf(acc_hp) > tap_hp_th && fabsf(jerk) > 30.0f && tap_cooldown == 0) {
         eventbus_publish(eventbus_make_event_id(IMU_EVENT_BASE_ID, IMU_EVENT_TAP),
-                         NULL, 0, 0);
+                         &data, sizeof(imu_data_t), 0);
         tap_cooldown = tap_cooldown_ms;
     }
 
@@ -83,7 +83,7 @@ static exit_code_t imu_service_dispath_event(const imu_data_t data)
         flip_cooldown == 0)
     {
         eventbus_publish(eventbus_make_event_id(IMU_EVENT_BASE_ID, IMU_EVENT_FLIP),
-                         NULL, 0, 0);
+                         &data, sizeof(imu_data_t), 0);
         flip_cooldown = flip_cooldown_ms;
     }
 
@@ -144,20 +144,20 @@ static exit_code_t imu_service_dispath_event(const imu_data_t data)
         case IMU_STATE_ACTIVE:
             if (current_state == IMU_STATE_SLEEP) {
                 eventbus_publish(eventbus_make_event_id(IMU_EVENT_BASE_ID, IMU_EVENT_WAKE_UP),
-                                 NULL, 0, 0);
+                                 &data, sizeof(imu_data_t), 0);
             }
             break;
         case IMU_STATE_SHAKING:
             eventbus_publish(eventbus_make_event_id(IMU_EVENT_BASE_ID, IMU_EVENT_SHAKE),
-                             NULL, 0, 0);
+                             &data, sizeof(imu_data_t), 0);
             break;
         case IMU_STATE_FALLING:
             eventbus_publish(eventbus_make_event_id(IMU_EVENT_BASE_ID, IMU_EVENT_FALLING),
-                             NULL, 0, 0);
+                             &data, sizeof(imu_data_t), 0);
             break;
         case IMU_STATE_ROTATING:
             eventbus_publish(eventbus_make_event_id(IMU_EVENT_BASE_ID, IMU_EVENT_ROTATING),
-                             NULL, 0, 0);
+                             &data, sizeof(imu_data_t), 0);
             break;
         case IMU_STATE_SLEEP:
             break;
@@ -171,7 +171,7 @@ static exit_code_t imu_service_dispath_event(const imu_data_t data)
         if (idle_ms >= sleep_hold_ms) {
             current_state = IMU_STATE_SLEEP;
             eventbus_publish(eventbus_make_event_id(IMU_EVENT_BASE_ID, IMU_EVENT_SLEEP),
-                             NULL, 0, 0);
+                             &data, sizeof(imu_data_t), 0);
         }
     }
 

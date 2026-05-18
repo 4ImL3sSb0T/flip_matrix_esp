@@ -40,7 +40,7 @@ static float s_led_grid[VISIBLE_RES * VISIBLE_RES];
 
 static void imu_event_handler(const eventbus_event_t *evt, void *user_ctx) {
     // if (evt->payload_len != sizeof(imu_data_t)) return;
-    
+    const imu_data_t *data = (const imu_data_t *)evt->payload;
     switch (evt->id.event_id) {
         case IMU_EVENT_SLEEP:
             ESP_LOGI("app_water_sim", "Received IMU_EVENT_SLEEP");
@@ -58,7 +58,9 @@ static void imu_event_handler(const eventbus_event_t *evt, void *user_ctx) {
             ESP_LOGI("app_water_sim", "Received IMU_EVENT_SHAKE");
             break;
         case IMU_EVENT_TAP:
-            
+            if (s_brightness > 0.9f) s_brightness = 0.1f;
+            else s_brightness += 0.1f;
+            app_water_sim_set_brightness(s_brightness);
             ESP_LOGI("app_water_sim", "Received IMU_EVENT_TAP");
             break;
         case IMU_EVENT_ROTATING:
