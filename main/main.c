@@ -15,6 +15,82 @@
 #include "bsp/imu963ra/zf_device_imu963ra.h"
 #include "driver/uart.h"
 #include "service/event_bus/event_bus.h"
+#include <stdlib.h>
+
+// ── CPU 运行时监控 ──────────────────────────────────────────────────────────
+#define MON_TAG       "CPU"
+#define MON_BUF_SIZE  512
+
+static void cpu_monitor_task(void *arg)
+{
+    TaskStatus_t *status_a = NULL, *status_b = NULL;
+    UBaseType_t prev_num = 0;
+
+    // 延迟 1s 让系统先跑起来，采集的是稳态数据
+    vTaskDelay(pdMS_TO_TICKS(1000));
+
+    while (1) {
+        // ── 采样 A ──
+        UBaseType_t num = uxTaskGetNumberOfTasks();
+        if (num > prev_num) {
+            free(status_a);
+            free(status_b);
+            status_a = malloc(sizeof(TaskStatus_t) * num);
+            status_b = malloc(sizeof(TaskStatus_t) * num);
+            prev_num = num;
+        }
+
+        uint32_t total_a = 0;
+        UBaseType_t n_a = 0;
+        if (status_a) {
+            n_a = uxTaskGetSystemState(status_a, num, &total_a);
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(1000));
+
+        // ── 采样 B ──
+        uint32_t total_b = 0;
+        UBaseType_t n_b = 0;
+        if (status_b) {
+            n_b = uxTaskGetSystemState(status_b, num, &total_b);
+        }
+
+        if (!status_a || !status_b || n_a == 0 || n_b == 0)
+            continue;
+
+        uint32_t total_delta = total_b - total_a;
+        if (total_delta == 0)
+            continue;
+
+        // ── 对齐 A/B 中的 task handle，计算差值 ──
+        ESP_LOGI(MON_TAG, "------------------------------------");
+        ESP_LOGI(MON_TAG, "%-16s %8s", "Task", "% CPU");
+
+        for (UBaseType_t i = 0; i < n_b; i++) {
+            // 在 A 中找同一个 task
+            uint32_t run_a = 0;
+            for (UBaseType_t j = 0; j < n_a; j++) {
+                if (status_a[j].xHandle == status_b[i].xHandle) {
+                    run_a = status_a[j].ulRunTimeCounter;
+                    break;
+                }
+            }
+
+            uint32_t run_delta = status_b[i].ulRunTimeCounter - run_a;
+            int pct = (int)((run_delta * 100) / total_delta);
+
+            if (pct > 0) {
+                ESP_LOGI(MON_TAG, "%-16s %7d%%",
+                         status_b[i].pcTaskName, pct);
+            }
+        }
+
+        // ── 堆内存 ──
+        ESP_LOGI(MON_TAG, "Heap free: %d  (low: %d)",
+                 (int)esp_get_free_heap_size(),
+                 (int)esp_get_minimum_free_heap_size());
+    }
+}
 
 void led_task(void *pvParameter)
 {
@@ -100,6 +176,7 @@ void app_main(void)
     uart_async_start();
     // xTaskCreatePinnedToCore(led_task, "led_task", 4096, NULL, 5, NULL, 1);
     xTaskCreatePinnedToCore(start_flip_task, "flip_task", 4096, NULL, 5, NULL, 1);
+    xTaskCreatePinnedToCore(cpu_monitor_task, "cpu_mon", 4096, NULL, 3, NULL, 0);
     while (1) {
         // ESP_LOGI("main", "Main task running... Count: %d", count++);
         vTaskDelay(pdTICKS_TO_MS(10));

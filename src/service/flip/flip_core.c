@@ -33,14 +33,15 @@ Modifications/port to C:
 
 // gamma LUT
 static bool s_gamma_inited = false;
-static uint8_t s_gamma_lut[256];
+static float s_gamma_lut[256];
 
 static void gamma_init_once(void) {
     if (s_gamma_inited)
         return;
+    const float scale = LED_VAL_MAX_F / 255.0f;
     for (int i = 0; i < 256; i++) {
         float x = (float)i / 255.0f;
-        s_gamma_lut[i] = (uint8_t)lrintf(powf(x, GAMMA_F) * 255.0f);
+        s_gamma_lut[i] = powf(x, GAMMA_F) * 255.0f * scale;
     }
     s_gamma_inited = true;
 }
@@ -98,10 +99,14 @@ static void integrate_particles(int n, float* pos, float* vel, float dt,
     const float dgy = gy * dt;
     dsps_addc_f32(&vel[0], &vel[0], n, dgx, 2, 2);
     dsps_addc_f32(&vel[1], &vel[1], n, dgy, 2, 2);
-    for (int i = 0; i < n; i++) {
-        pos[2 * i + 0] += vel[2 * i + 0] * dt;
-        pos[2 * i + 1] += vel[2 * i + 1] * dt;
-    }
+
+    // DSP 向量化位置更新：pos_x += vel_x * dt, pos_y += vel_y * dt
+    // stride=2 跳过交错的 AoS 布局，分别处理 x 和 y 分量
+    float tmp[n];
+    dsps_mul_f32(&vel[0], &dt, tmp, n, 2, 0, 1);
+    dsps_add_f32(&pos[0], tmp, &pos[0], n, 2, 1, 2);
+    dsps_mul_f32(&vel[1], &dt, tmp, n, 2, 0, 1);
+    dsps_add_f32(&pos[1], tmp, &pos[1], n, 2, 1, 2);
 }
 
 static void push_particles_apart(int num_particles, float* pos,
@@ -180,8 +185,7 @@ static void push_particles_apart(int num_particles, float* pos,
                         if (d2 > min_dist2 || d2 == 0.0f)
                             continue;
 
-                        float d = 0.0f;
-                        dsps_sqrt_f32(&d2, &d, 1);
+                        float d = sqrtf(d2);
                         float s = (0.5f * (min_dist - d)) / d;
                         dx *= s;
                         dy *= s;
@@ -512,8 +516,7 @@ static void get_led_grid(const FlipFluid* f, float* out_grid, int visible_x,
                 b = 1.0f;
 
             uint8_t bi = (uint8_t)lrintf(b * 255.0f);
-            uint8_t bg = s_gamma_lut[bi];
-            out_grid[i * visible_y + j] = (float)bg * (LED_VAL_MAX_F / 255.0f);
+            out_grid[i * visible_y + j] = s_gamma_lut[bi];
         }
     }
 }

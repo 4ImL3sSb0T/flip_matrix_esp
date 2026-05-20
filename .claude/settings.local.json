@@ -9,7 +9,10 @@
       "Read(//c/Espressif/**)",
       "Read(//d/Espressif/**)",
       "Read(//d/Software/Esp/v5.5.4/esp-idf/components/driver/**)",
-      "Bash(idf.py build *)"
+      "Bash(idf.py build *)",
+      "Bash(Test-Path *)",
+      "Bash(powershell *)",
+      "Bash(dir D:\\\\Project\\\\Esp32s3_LEDPan\\\\managed_components\\\\espressif__esp-dsp\\\\modules *)"
     ]
   }
 }
