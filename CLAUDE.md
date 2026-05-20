@@ -41,17 +41,17 @@ idf.py menuconfig
 - `app_water_sim_cmd.c` — 对应的 CLI 命令（`wsim_gravity`, `wsim_solver`, `wsim_color`, `wsim_dt`, `wsim_status`）
 
 ### `src/service/` — 服务层
-- **`matrix/`** — LED 矩阵服务，双缓冲架构（back/front buffer）。写入接口只修改 back_buffer，需手动调用 `matrix_write_async()` 提交帧。支持 progressive 和 snake（蛇形走线）两种拓扑。CLI 命令前缀 `mtrx_*`
+- **`event_bus/`** — 发布/订阅事件总线，基于 FreeRTOS 队列。支持按 `module_id` + `event_id` 匹配订阅者，`EVENTBUS_EVENT_ID_ALL` 通配。各模块通过 `eventbus_allocate_module_id()` 获取唯一模块 ID
+- **`matrix/`** — LED 矩阵服务，基于 `led_strip` RMT 驱动。写入接口修改内部缓冲，需手动调用 `matrix_write_async()` 刷新。支持 progressive 和 snake（蛇形走线）两种拓扑。CLI 命令前缀 `mtrx_*`
 - **`flip/`** — FLIP (Fluid-Implicit-Particle) 二维流体仿真核心，管理粒子系统、速度场、压力场和密度场
-- **`imu/`** — IMU 服务，抽象传感器接口（`imu_sensor_t`），内部使用 Madgwick AHRS 滤波器计算欧拉角
+- **`imu/`** — IMU 服务，抽象传感器接口（`imu_sensor_t`），内部使用 Madgwick AHRS 滤波器计算欧拉角。包含状态机（IDLE/ACTIVE/SHAKING/FALLING/ROTATING/SLEEP），通过事件总线发布 IMU 事件（TAP/FLIP/SHAKE/FALLING/ROTATING/SLEEP/WAKE_UP）
 - **`cli/`** — letter shell v3.2.4 移植，通过 UART 交互。使用 `SHELL_EXPORT_CMD()` 宏在链接段 `.shellCommand` 中注册命令
 - **`cli/log/`** — 日志工具，支持 ERROR/WARNING/INFO/DEBUG/VERBOSE 五级，通过 `logError()`, `logInfo()` 等宏使用
 - **`tools/`** — 通用工具：`common_def.h`（`exit_code_t` 返回码、类型别名）、`vec_math.h`（2D/3D 向量数学库）
 
 ### `src/bsp/` — 板级支持包
-- **`ws2812b/`** — WS2812B 驱动（LibDriver 移植），通过 SPI DMA 发送编码数据。`driver_ws2812b_interface.c` 是硬件适配层
 - **`imu963ra/`** — IMU963RA 传感器驱动
-- **`mpu6500/`** — MPU6500 传感器驱动
+- **`mpu6500/`** — MPU6500 传感器驱动（备用）
 - **`uart/`** — UART 异步收发驱动
 
 ## Key Conventions
@@ -69,13 +69,23 @@ SHELL_EXPORT_CMD(
 命令函数签名为 `int func(int argc, char *argv[])`。注意描述中的 `\r\n` 用于分隔帮助文本。
 
 ### LED 矩阵
-- 写入操作（`matrix_set_pixel`, `matrix_fill`, `matrix_write_buffer`）只修改 back_buffer，不自动刷新
-- 必须调用 `matrix_write_async()` 才会将帧提交到 LED
-- `spi_temp` 缓冲区位于 `.dma_buffer` 段（D2 SRAM `0x30000000`），配置为 non-cacheable 以保证 DMA 一致性
+- 写入操作（`matrix_set_pixel`, `matrix_fill`, `matrix_write_buffer`）只修改 led_strip 内部缓冲，不自动刷新
+- 必须调用 `matrix_write_async()` 才会通过 RMT DMA 将帧提交到 LED
+- 底层使用 `espressif/led_strip` 组件的 RMT 驱动，配置 `gpio_num` 和 `MATRIX_MAX_LEDS`
 
 ### FreeRTOS
 - 使用 `pdMS_TO_TICKS()` 和 `pdTICKS_TO_MS()` 进行 tick 转换
 - 内存分配使用 `pvPortMalloc` / `vPortFree`
+
+### 事件总线
+- 所有模块间通信通过 `event_bus` 发布/订阅，不直接调用其他模块的回调
+- 模块通过 `eventbus_allocate_module_id()` 获取唯一 ID，事件通过 `eventbus_publish()` 发布
+- 订阅时可用 `EVENTBUS_EVENT_ID_ALL` 通配某个模块的所有事件
+- 事件负载为堆分配的变长结构（`eventbus_event_t.payload[]`），回调中只读，由事件总线负责释放
+
+### 启动流程
+1. `app_main()`（core 0）：初始化事件总线 → 初始化 UART → 创建 `start_flip_task`（core 1）
+2. `start_flip_task()`（core 1）：初始化 shell → 初始化 IMU 服务 → 初始化水仿真应用 → 启动仿真任务
 
 ## Dependencies (managed_components)
 
