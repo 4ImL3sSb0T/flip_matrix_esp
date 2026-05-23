@@ -16,6 +16,7 @@
 #include "driver/uart.h"
 #include "service/event_bus/event_bus.h"
 #include "service/wifi/wifi_service.h"
+#include "service/tcp/tcp_server.h"
 #include <stdlib.h>
 
 // ── CPU 运行时监控 ──────────────────────────────────────────────────────────
@@ -141,11 +142,35 @@ void led_task(void *pvParameter)
     }
 }
 
+// ── TCP server 回调（留空，由用户填充业务逻辑）──────────────────────────────
+static void tcp_on_data(int client_sock, const char *data, int len)
+{
+    ESP_LOGI("TCP", "[sock=%d] Received %d bytes: %.*s", client_sock, len, len, data);
+}
+
+static void tcp_on_connect(int client_sock, const char *ip_str)
+{
+    ESP_LOGI("TCP", "[sock=%d] Client connected: %s", client_sock, ip_str);
+}
+
+static void tcp_on_disconnect(int client_sock)
+{
+    ESP_LOGI("TCP", "[sock=%d] Client disconnected", client_sock);
+}
+
 void start_flip_task(void *pvParameter)
 {
 
     wifi_service_init();
     wifi_service_start();
+
+    static tcp_server_callbacks_t tcp_cbs = {
+        .on_data       = tcp_on_data,
+        .on_connect    = tcp_on_connect,
+        .on_disconnect = tcp_on_disconnect,
+    };
+    tcp_server_init(8080, &tcp_cbs);
+    tcp_server_start();
 
     shell_port_init();
     shell_port_start();

@@ -36,7 +36,9 @@
       "mcp__plugin_claude-mem_mcp-search__smart_unfold",
       "mcp__dashscope-github__create_issue",
       "Bash(mkdir -p \"D:/Project/Esp32s3_LEDPan/src/bsp/wifi\")",
-      "Bash(mkdir -p \"D:/Project/Esp32s3_LEDPan/src/service/wifi\")"
+      "Bash(mkdir -p \"D:/Project/Esp32s3_LEDPan/src/service/wifi\")",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:docs.espressif.com)"
     ]
   }
 }
