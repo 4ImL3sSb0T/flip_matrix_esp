@@ -19,6 +19,7 @@ static esp_netif_t *s_sta_netif = NULL;
 static esp_event_handler_instance_t s_wifi_handler = NULL;
 static esp_event_handler_instance_t s_ip_handler = NULL;
 static int s_retry_count = 0;
+static TaskHandle_t s_service_task = NULL;
 #define WIFI_BSP_MAX_RETRY 5
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
@@ -34,6 +35,10 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         } else {
             xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
             ESP_LOGE(WIFI_TAG, "Connection failed after %d retries", WIFI_BSP_MAX_RETRY);
+            // 通知 service 任务连接已丢失
+            if (s_service_task) {
+                xTaskNotifyGive(s_service_task);
+            }
         }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
@@ -133,4 +138,14 @@ exit_code_t wifi_bsp_disconnect(void)
     esp_wifi_stop();
     ESP_LOGI(WIFI_TAG, "Disconnected");
     return EXIT_OK;
+}
+
+void wifi_bsp_set_service_task(TaskHandle_t task)
+{
+    s_service_task = task;
+}
+
+bool wifi_bsp_wait_disconnect(TickType_t timeout)
+{
+    return ulTaskNotifyTake(pdTRUE, timeout) > 0;
 }

@@ -29,6 +29,8 @@ static void publish_event(wifi_svc_event_t event_id)
 
 static void wifi_service_task(void *arg)
 {
+    wifi_bsp_set_service_task(xTaskGetCurrentTaskHandle());
+
     while (1) {
         if (strlen(WIFI_SSID) == 0) {
             ESP_LOGW(WIFI_TAG, "SSID not configured, skipping connect");
@@ -44,8 +46,9 @@ static void wifi_service_task(void *arg)
         if (ret == EXIT_OK) {
             s_state = WIFI_STATE_CONNECTED;
             publish_event(WIFI_SVC_EVENT_CONNECTED);
-            // 等待断开事件
-            vTaskDelay(pdMS_TO_TICKS(30000));
+            // 阻塞等待断连通知（BSP 重试耗尽后发出）
+            wifi_bsp_wait_disconnect(portMAX_DELAY);
+            ESP_LOGW(WIFI_TAG, "Connection lost, reconnecting...");
         } else {
             s_state = WIFI_STATE_FAILED;
             publish_event(WIFI_SVC_EVENT_FAILED);
@@ -83,10 +86,14 @@ exit_code_t wifi_service_start(void)
 exit_code_t wifi_service_deinit(void)
 {
     if (s_task_handle) {
+        // 先断开 WiFi，触发 BSP 重试耗尽后通知任务
+        wifi_bsp_disconnect();
+        // 给任务一个通知让它从 wait 中醒来
+        xTaskNotifyGive(s_task_handle);
+        vTaskDelay(pdMS_TO_TICKS(200));
         vTaskDelete(s_task_handle);
         s_task_handle = NULL;
     }
-    wifi_bsp_disconnect();
     wifi_bsp_deinit();
     s_state = WIFI_STATE_DISCONNECTED;
     ESP_LOGI(WIFI_TAG, "WiFi service deinitialized");

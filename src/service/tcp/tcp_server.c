@@ -151,6 +151,8 @@ static void tcp_server_task(void *arg)
 
             if (ret < 0) {
                 ESP_LOGE(TAG, "select() failed: errno %d", errno);
+                close_all_clients(clients, listen_sock);
+                listen_sock = INVALID_SOCK;
                 break;
             }
             if (ret == 0) {
