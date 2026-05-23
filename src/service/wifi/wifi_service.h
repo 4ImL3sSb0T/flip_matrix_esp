@@ -14,11 +14,11 @@ typedef enum {
 } wifi_state_t;
 
 typedef enum : uint32_t {
-    WIFI_EVENT_CONNECTED,
-    WIFI_EVENT_DISCONNECTED,
-    WIFI_EVENT_GOT_IP,
-    WIFI_EVENT_FAILED,
-} wifi_event_t;
+    WIFI_SVC_EVENT_CONNECTED,
+    WIFI_SVC_EVENT_DISCONNECTED,
+    WIFI_SVC_EVENT_GOT_IP,
+    WIFI_SVC_EVENT_FAILED,
+} wifi_svc_event_t;
 
 exit_code_t wifi_service_init(void);
 exit_code_t wifi_service_start(void);

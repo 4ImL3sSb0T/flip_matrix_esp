@@ -20,7 +20,7 @@ uint16_t WIFI_EVENT_BASE_ID = 0;
 static wifi_state_t s_state = WIFI_STATE_DISCONNECTED;
 static TaskHandle_t s_task_handle = NULL;
 
-static void publish_event(wifi_event_t event_id)
+static void publish_event(wifi_svc_event_t event_id)
 {
     eventbus_publish(
         eventbus_make_event_id(WIFI_EVENT_BASE_ID, event_id),
@@ -38,17 +38,17 @@ static void wifi_service_task(void *arg)
         }
 
         s_state = WIFI_STATE_CONNECTING;
-        publish_event(WIFI_EVENT_DISCONNECTED);
+        publish_event(WIFI_SVC_EVENT_DISCONNECTED);
 
         exit_code_t ret = wifi_bsp_connect(WIFI_SSID, WIFI_PASSWORD);
         if (ret == EXIT_OK) {
             s_state = WIFI_STATE_CONNECTED;
-            publish_event(WIFI_EVENT_CONNECTED);
+            publish_event(WIFI_SVC_EVENT_CONNECTED);
             // 等待断开事件
             vTaskDelay(pdMS_TO_TICKS(30000));
         } else {
             s_state = WIFI_STATE_FAILED;
-            publish_event(WIFI_EVENT_FAILED);
+            publish_event(WIFI_SVC_EVENT_FAILED);
             ESP_LOGW(WIFI_TAG, "Connect failed, retrying in %dms", WIFI_RECONNECT_DELAY_MS);
             vTaskDelay(pdMS_TO_TICKS(WIFI_RECONNECT_DELAY_MS));
         }
