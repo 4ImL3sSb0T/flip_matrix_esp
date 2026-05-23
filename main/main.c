@@ -15,6 +15,7 @@
 #include "bsp/imu963ra/zf_device_imu963ra.h"
 #include "driver/uart.h"
 #include "service/event_bus/event_bus.h"
+#include "service/wifi/wifi_service.h"
 #include <stdlib.h>
 
 // ── CPU 运行时监控 ──────────────────────────────────────────────────────────
@@ -142,6 +143,9 @@ void led_task(void *pvParameter)
 
 void start_flip_task(void *pvParameter)
 {
+
+    wifi_service_init();
+    wifi_service_start();
 
     shell_port_init();
     shell_port_start();

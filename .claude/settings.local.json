@@ -12,7 +12,31 @@
       "Bash(idf.py build *)",
       "Bash(Test-Path *)",
       "Bash(powershell *)",
-      "Bash(dir D:\\\\Project\\\\Esp32s3_LEDPan\\\\managed_components\\\\espressif__esp-dsp\\\\modules *)"
+      "Bash(dir D:\\\\Project\\\\Esp32s3_LEDPan\\\\managed_components\\\\espressif__esp-dsp\\\\modules *)",
+      "mcp__plugin_claude-mem_mcp-search__smart_search",
+      "mcp__plugin_claude-mem_mcp-search__smart_outline",
+      "Bash(node -e ' *)",
+      "Bash(npm config *)",
+      "Bash(where python *)",
+      "Bash(where python3 *)",
+      "Bash(npm -v)",
+      "Read(//c/Program Files/Microsoft Visual Studio/**)",
+      "Read(//c/Program Files \\(x86\\)/Microsoft Visual Studio/**)",
+      "Read(//c//**)",
+      "Bash(node install.js)",
+      "Bash(C:\\\\Users\\\\yuang\\\\.claude\\\\plugins\\\\cache\\\\thedotmack\\\\claude-mem\\\\12.4.9\\\\node_modules\\\\tree-sitter-cli\\\\tree-sitter.exe *)",
+      "Bash(\"C:\\\\Users\\\\yuang\\\\.claude\\\\plugins\\\\cache\\\\thedotmack\\\\claude-mem\\\\12.4.9\\\\node_modules\\\\tree-sitter-cli\\\\tree-sitter.exe\" query *)",
+      "Bash(\"node_modules\\\\tree-sitter-cli\\\\tree-sitter.exe\" init-config *)",
+      "Bash(C:\\\\Users\\\\yuang\\\\.claude\\\\plugins\\\\cache\\\\thedotmack\\\\claude-mem\\\\12.4.9\\\\node_modules\\\\tree-sitter-cli\\\\tree-sitter.exe parse *)",
+      "Bash(node *)",
+      "Bash(tasklist)",
+      "Bash(wmic process *)",
+      "Bash(C:\\\\Users\\\\yuang\\\\.bun\\\\bin\\\\bun.exe *)",
+      "Bash(where tree-sitter *)",
+      "mcp__plugin_claude-mem_mcp-search__smart_unfold",
+      "mcp__dashscope-github__create_issue",
+      "Bash(mkdir -p \"D:/Project/Esp32s3_LEDPan/src/bsp/wifi\")",
+      "Bash(mkdir -p \"D:/Project/Esp32s3_LEDPan/src/service/wifi\")"
     ]
   }
 }

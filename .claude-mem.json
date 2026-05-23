@@ -1,0 +1,9 @@
+{
+  "grammars": {
+    "c": {
+      "package": "tree-sitter-c",
+      "extensions": [".c", ".h"],
+      "query": ".claude-mem-c.scm"
+    }
+  }
+}
