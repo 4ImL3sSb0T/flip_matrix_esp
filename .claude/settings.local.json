@@ -42,7 +42,10 @@
       "Bash(python \"D:/Software/Esp/v5.5.4/esp-idf/tools/idf.py\" build)",
       "Bash(C:/Espressif/tools/python/v5.5.4/venv/Scripts/python.exe *)",
       "Bash(export IDF_PATH=\"D:/Software/Esp/v5.5.4/esp-idf\")",
-      "Bash(export IDF_TOOLS_PATH=\"C:/Espressif/tools\")"
+      "Bash(export IDF_TOOLS_PATH=\"C:/Espressif/tools\")",
+      "WebSearch",
+      "mcp__tavily__tavily_search",
+      "mcp__tavily__tavily_extract"
     ]
   }
 }
