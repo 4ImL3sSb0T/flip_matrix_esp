@@ -12,6 +12,7 @@ static int IMU963RA_MOSI_PIN = GPIO_NUM_11;
 static int IMU963RA_MISO_PIN = GPIO_NUM_12;
 static int IMU963RA_SCK_PIN  = GPIO_NUM_13;
 static int IMU963RA_CS_PIN   = GPIO_NUM_10;
+static int IMU963RA_INT1_PIN = GPIO_NUM_9;
 
 static spi_device_handle_t spi;
 
