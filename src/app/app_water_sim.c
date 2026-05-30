@@ -39,8 +39,7 @@ static float s_led_grid[VISIBLE_RES * VISIBLE_RES];
 
 
 static void imu_event_handler(const eventbus_event_t *evt, void *user_ctx) {
-    // if (evt->payload_len != sizeof(imu_data_t)) return;
-    const imu_data_t *data = (const imu_data_t *)evt->payload;
+    // const imu_data_t *data = (const imu_data_t *)evt->payload; // TODO: 需要时再使用
     switch (evt->id.event_id) {
         case IMU_EVENT_SLEEP:
             ESP_LOGI("app_water_sim", "Received IMU_EVENT_SLEEP");

@@ -12,7 +12,7 @@
 #include "app/app_water_sim.h"
 #include "service/matrix/matrix.h"
 #include "service/imu/imu_service.h"
-#include "bsp/imu963ra/zf_device_imu963ra.h"
+#include "bsp/imu963ra/imu963ra.h"
 #include "driver/uart.h"
 #include "service/event_bus/event_bus.h"
 #include "service/wifi/wifi_service.h"

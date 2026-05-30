@@ -83,23 +83,26 @@ IMU_FIFO task (priority 3, stack 8192)
 
 | 寄存器 | 地址 | 值 | 含义 |
 |--------|------|-----|------|
-| INT1_CTRL | 0x0D | 0x10 | 仅 FIFO watermark 中断 |
+| INT1_CTRL | 0x0D | 0x08 | 仅 FIFO watermark 中断 (bit3=INT1_FIFO_TH) |
 
 ### BDR 编码 (FIFO_CTRL3)
 
-| 编码 | BDR |
-|------|-----|
-| 0x01 | 1.6 Hz |
-| 0x02 | 12.5 Hz |
-| 0x03 | 26 Hz |
-| 0x04 | 52 Hz |
-| 0x05 | 104 Hz |
-| 0x06 | 208 Hz |
-| 0x07 | 417 Hz |
-| 0x08 | 833 Hz |
-| 0x09 | 1667 Hz |
-| 0x0A | 3333 Hz |
-| 0x0B | 6667 Hz |
+FIFO_CTRL3 高 4 位 = BDR_GY，低 4 位 = BDR_XL。本设计使用 0x77（均为 833Hz）。
+
+| 编码 | BDR_XL / BDR_GY |
+|------|-----------------|
+| 0x00 | 不批入 FIFO |
+| 0x01 | 12.5 Hz |
+| 0x02 | 26 Hz |
+| 0x03 | 52 Hz |
+| 0x04 | 104 Hz |
+| 0x05 | 208 Hz |
+| 0x06 | 417 Hz |
+| 0x07 | **833 Hz** |
+| 0x08 | 1667 Hz |
+| 0x09 | 3333 Hz |
+| 0x0A | 6667 Hz |
+| 0x0B | 6.5 Hz (GY) / 1.6 Hz (XL, 仅低功耗) |
 
 ## 5. 文件修改
 

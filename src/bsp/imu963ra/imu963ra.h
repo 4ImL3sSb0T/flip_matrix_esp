@@ -21,7 +21,7 @@
 * 许可证副本在 libraries 文件夹下 即该文件夹下的 LICENSE 文件
 * 欢迎各位使用并传播本程序 但修改内容时必须保留逐飞科技的版权声明（即本声明）
 * 
-* 文件名称          zf_device_imu963ra
+* 文件名称          imu963ra.h
 * 公司名称          成都逐飞科技有限公司
 * 版本信息          查看 libraries/doc 文件夹内 version 文件 版本说明
 * 开发环境          IAR 8.32.4 or MDK 5.33
@@ -37,25 +37,25 @@
 *                   ------------------------------------
 *                   模块管脚            单片机管脚
 *                   // 硬件 SPI 引脚
-*                   SCL/SPC             查看 zf_device_imu963ra.h 中 IMU963RA_SPC_PIN 宏定义
-*                   SDA/DSI             查看 zf_device_imu963ra.h 中 IMU963RA_SDI_PIN 宏定义
-*                   SA0/SDO             查看 zf_device_imu963ra.h 中 IMU963RA_SDO_PIN 宏定义
-*                   CS                  查看 zf_device_imu963ra.h 中 IMU963RA_CS_PIN  宏定义
+*                   SCL/SPC             查看 imu963ra.h.h 中 IMU963RA_SPC_PIN 宏定义
+*                   SDA/DSI             查看 imu963ra.h.h 中 IMU963RA_SDI_PIN 宏定义
+*                   SA0/SDO             查看 imu963ra.h.h 中 IMU963RA_SDO_PIN 宏定义
+*                   CS                  查看 imu963ra.h.h 中 IMU963RA_CS_PIN  宏定义
 *                   VCC                 3.3V电源
 *                   GND                 电源地
 *                   其余引脚悬空
 
 *                   // 软件 IIC 引脚
-*                   SCL/SPC             查看 zf_device_imu963ra.h 中 IMU963RA_SCL_PIN 宏定义
-*                   SDA/DSI             查看 zf_device_imu963ra.h 中 IMU963RA_SDA_PIN 宏定义
+*                   SCL/SPC             查看 imu963ra.h.h 中 IMU963RA_SCL_PIN 宏定义
+*                   SDA/DSI             查看 imu963ra.h.h 中 IMU963RA_SDA_PIN 宏定义
 *                   VCC                 3.3V电源
 *                   GND                 电源地
 *                   其余引脚悬空
 *                   ------------------------------------
 ********************************************************************************************************************/
 
-#ifndef _zf_device_imu963ra_h
-#define _zf_device_imu963ra_h
+#ifndef _IMU963RA_H
+#define _IMU963RA_H
 
 #include <stdint.h>
 #include "service/tools/vec_math.h"

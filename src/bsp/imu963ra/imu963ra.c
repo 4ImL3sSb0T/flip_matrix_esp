@@ -6,13 +6,13 @@
 
 #include "service/tools/vec_math.h"
 #include "service/tools/common_def.h"
-#include "zf_device_imu963ra.h"
+#include "imu963ra.h"
 
 static int IMU963RA_MOSI_PIN = GPIO_NUM_11;
 static int IMU963RA_MISO_PIN = GPIO_NUM_12;
 static int IMU963RA_SCK_PIN  = GPIO_NUM_13;
 static int IMU963RA_CS_PIN   = GPIO_NUM_10;
-static int IMU963RA_INT1_PIN = GPIO_NUM_9;
+// static int IMU963RA_INT1_PIN = GPIO_NUM_9; // TODO: 中断引脚，暂未使用
 
 static spi_device_handle_t spi;
 
