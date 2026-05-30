@@ -45,7 +45,9 @@
       "Bash(export IDF_TOOLS_PATH=\"C:/Espressif/tools\")",
       "WebSearch",
       "mcp__tavily__tavily_search",
-      "mcp__tavily__tavily_extract"
+      "mcp__tavily__tavily_extract",
+      "mcp__dashscope-github__get_file_contents",
+      "mcp__dashscope-github__search_code"
     ]
   }
 }
