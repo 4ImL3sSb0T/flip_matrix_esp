@@ -150,20 +150,19 @@ class CNNSampleViewer:
 
             # ── 行 2 左: 合成 RGB ──
             self.ax_rgb.clear()
-            # 归一化到 0-1
-            def norm(arr):
-                mn, mx = arr.min(), arr.max()
-                return (arr - mn) / (mx - mn + 1e-10)
+            # 用 dB 谱归一化，percentile clip 防止离群值压暗
+            def norm_db(arr):
+                db = 20 * np.log10(arr.T + 1e-10)  # (512, 64) 频率×帧
+                lo, hi = np.percentile(db, [2, 98])
+                return np.clip((db - lo) / (hi - lo + 1e-10), 0, 1)
 
             rgb = np.stack([
-                norm(sample["x"]),
-                norm(sample["y"]),
-                norm(sample["z"]),
-            ], axis=-1)  # (64, 512, 3)
-            # 转置显示: 纵轴=频率, 横轴=帧
+                norm_db(sample["x"]),
+                norm_db(sample["y"]),
+                norm_db(sample["z"]),
+            ], axis=-1)  # (512, 64, 3)  纵轴=频率, 横轴=帧
             self.ax_rgb.imshow(
-                rgb.transpose(1, 0, 2), aspect="auto",
-                origin="lower",
+                rgb, aspect="auto", origin="lower",
                 extent=[0, self.sample_len, 0, SP_SAMPLE_RATE / 2],
             )
             self.ax_rgb.set_title("RGB Composite", fontproperties=_CN_FONT, fontsize=10)
