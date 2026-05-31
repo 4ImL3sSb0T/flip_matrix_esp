@@ -52,7 +52,10 @@
       "Bash(findstr /i \"FIFO_DATA_OUT_TAG FIFO_CTRL FIFO_STATUS INT1_CTRL TAG_SENSOR tag_gyro tag_xl tag_temp\" call_0d390cb366f8406699273405.json)",
       "mcp__dashscope-github__search_repositories",
       "Bash(curl -s \"https://raw.githubusercontent.com/xiao-gao03/IMU963ra-ok/main/code/seekfree_peripheral/SEEKFREE_IMU963RA.c\")",
-      "Bash(curl *)"
+      "Bash(curl *)",
+      "Bash(Get-ChildItem \"D:\\\\Project\\\\Esp32s3_LEDPan\\\\tools\\\\data_process\" -Recurse)",
+      "Bash(Select-Object FullName, Length)",
+      "Bash(uv add *)"
     ]
   }
 }
