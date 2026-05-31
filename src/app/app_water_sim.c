@@ -1,6 +1,6 @@
 #include "app_water_sim.h"
 #include "freertos/FreeRTOS.h"
-#include "freertos/stream_buffer.h"
+#include "freertos/message_buffer.h"
 #include <math.h>
 #include "service/imu/imu_service.h"
 #include "service/cli/log/log.h"
@@ -32,11 +32,11 @@ static float s_dt = SIM_DT;
 static float s_brightness = 0.2f;
 
 // 从 ring buffer 读取最新样本（丢弃旧数据）
-static vec3f ring_buf_read_latest(StreamBufferHandle_t buf)
+static vec3f ring_buf_read_latest(MessageBufferHandle_t buf)
 {
     vec3f sample = {0};
     vec3f tmp;
-    while (xStreamBufferReceive(buf, &tmp, sizeof(vec3f), 0) == sizeof(vec3f)) {
+    while (xMessageBufferReceive(buf, &tmp, sizeof(vec3f), 0) == sizeof(vec3f)) {
         sample = tmp;
     }
     return sample;

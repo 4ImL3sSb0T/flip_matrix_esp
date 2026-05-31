@@ -4,7 +4,7 @@
 #include "service/tools/vec_math.h"
 #include "service/tools/common_def.h"
 #include "freertos/FreeRTOS.h"
-#include "freertos/stream_buffer.h"
+#include "freertos/message_buffer.h"
 
 typedef struct
 {
@@ -18,6 +18,6 @@ exit_code_t imu_service_start(void);
 exit_code_t imu_service_deinit(void);
 
 // 获取 acc ring buffer（数据类型 vec3f，单位 g）
-StreamBufferHandle_t imu_service_get_acc_buffer(void);
+MessageBufferHandle_t imu_service_get_acc_buffer(void);
 
 #endif

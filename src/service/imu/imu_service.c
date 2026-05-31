@@ -4,18 +4,18 @@
 #include "service/event_bus/event_bus.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/stream_buffer.h"
+#include "freertos/message_buffer.h"
 #include "esp_log.h"
 
 #define TAG "IMU_SVC"
 
 // ── 配置 ──────────────────────────────────────────────────────────────────────
-#define IMU_FIFO_WATERMARK      100
+#define IMU_FIFO_WATERMARK      256
 #define IMU_RING_BUF_ITEMS      1024
 
 // ── 静态变量 ──────────────────────────────────────────────────────────────────
 static imu_sensor_t *s_sensor = NULL;
-static StreamBufferHandle_t s_acc_ring_buf = NULL;
+static MessageBufferHandle_t s_acc_ring_buf = NULL;
 static stmdev_ctx_t s_dev_ctx;
 static uint16_t s_event_base_id = 0;
 
@@ -109,7 +109,7 @@ static void imu_fifo_task(void *arg)
 
     // 主循环
     while (1) {
-        vTaskDelay(pdMS_TO_TICKS(50));
+        vTaskDelay(pdMS_TO_TICKS(5));
 
         // [中断模式替代: ulTaskNotifyTake(pdTRUE, portMAX_DELAY)]
 
@@ -137,7 +137,7 @@ static void imu_fifo_task(void *arg)
                         .y = lsm6dsr_from_fs8g_to_mg(y) / 1000.0f,
                         .z = lsm6dsr_from_fs8g_to_mg(z) / 1000.0f,
                     };
-                    xStreamBufferSend(s_acc_ring_buf, &acc, sizeof(vec3f), 0);
+                    xMessageBufferSend(s_acc_ring_buf, &acc, sizeof(vec3f), 0);
                 }
                 break;
 
@@ -162,7 +162,7 @@ exit_code_t imu_service_init(imu_sensor_t *imu_sensor)
 
     eventbus_allocate_module_id(&s_event_base_id);
 
-    s_acc_ring_buf = xStreamBufferCreate(IMU_RING_BUF_ITEMS * sizeof(vec3f), sizeof(vec3f));
+    s_acc_ring_buf = xMessageBufferCreate(IMU_RING_BUF_ITEMS * sizeof(vec3f));
     ESP_LOGI(TAG, "acc_ring_buf=%p (items=%d)", s_acc_ring_buf, IMU_RING_BUF_ITEMS);
     if (!s_acc_ring_buf) {
         ESP_LOGE(TAG, "ring buffer alloc failed!");
@@ -184,12 +184,12 @@ exit_code_t imu_service_deinit(void)
 {
     if (!s_sensor) return EXIT_NOT_INITIALIZED;
     if (s_sensor->imu_deinit) s_sensor->imu_deinit();
-    if (s_acc_ring_buf) { vStreamBufferDelete(s_acc_ring_buf); s_acc_ring_buf = NULL; }
+    if (s_acc_ring_buf) { vMessageBufferDelete(s_acc_ring_buf); s_acc_ring_buf = NULL; }
     s_sensor = NULL;
     return EXIT_OK;
 }
 
-StreamBufferHandle_t imu_service_get_acc_buffer(void)
+MessageBufferHandle_t imu_service_get_acc_buffer(void)
 {
     return s_acc_ring_buf;
 }

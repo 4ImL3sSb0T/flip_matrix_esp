@@ -138,8 +138,8 @@ void app_main(void)
     tcp_server_init(8080, &tcp_cbs);
     tcp_server_start();
 
-    shell_port_init();
-    shell_port_start();
+    // shell_port_init();
+    // shell_port_start();
 
     // IMU 服务（FIFO 轮询，数据写入 ring buffer）
     static imu_sensor_t imu963ra_sensor = {
@@ -151,7 +151,7 @@ void app_main(void)
     imu_service_start();
 
     // 流体仿真（从 ring buffer 读取 IMU 数据）
-    xTaskCreatePinnedToCore(start_flip_task, "flip_task", 4096, NULL, 5, NULL, 1);
+    // xTaskCreatePinnedToCore(start_flip_task, "flip_task", 4096, NULL, 5, NULL, 1);
     xTaskCreatePinnedToCore(cpu_monitor_task, "cpu_mon", 4096, NULL, 3, NULL, 0);
     xTaskCreatePinnedToCore(imu_dsp_process, "imu_dsp", 4096, NULL, 4, NULL, 1);
 
