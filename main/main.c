@@ -18,6 +18,7 @@
 #include "service/wifi/wifi_service.h"
 #include "service/tcp/tcp_server.h"
 #include <stdlib.h>
+#include <service/signal_process/imu_data_process.h>
 
 // ── CPU 运行时监控 ──────────────────────────────────────────────────────────
 #define MON_TAG       "CPU"
@@ -152,6 +153,7 @@ void app_main(void)
     // 流体仿真（从 ring buffer 读取 IMU 数据）
     xTaskCreatePinnedToCore(start_flip_task, "flip_task", 4096, NULL, 5, NULL, 1);
     xTaskCreatePinnedToCore(cpu_monitor_task, "cpu_mon", 4096, NULL, 3, NULL, 0);
+    xTaskCreatePinnedToCore(imu_dsp_process, "imu_dsp", 4096, NULL, 4, NULL, 1);
 
     while (1) {
         vTaskDelay(pdTICKS_TO_MS(10));

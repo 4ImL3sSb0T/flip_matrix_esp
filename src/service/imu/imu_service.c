@@ -23,35 +23,29 @@ static uint16_t s_event_base_id = 0;
 
 static int32_t platform_write(void *handle, uint8_t reg, const uint8_t *bufp, uint16_t len)
 {
-    uint8_t *tx_buf = malloc(1 + len);
-    if (!tx_buf) return -1;
+    uint8_t tx_buf[32];  // lsm6dsr 单次写入不会超过几个字节
     tx_buf[0] = reg;
     memcpy(tx_buf + 1, bufp, len);
     spi_transaction_t t = {
         .length = 8 * (1 + len),
         .tx_buffer = tx_buf,
     };
-    esp_err_t ret = spi_device_transmit(*(spi_device_handle_t *)handle, &t);
-    free(tx_buf);
-    return (ret == ESP_OK) ? 0 : -1;
+    return (spi_device_transmit(*(spi_device_handle_t *)handle, &t) == ESP_OK) ? 0 : -1;
 }
 
 static int32_t platform_read(void *handle, uint8_t reg, uint8_t *bufp, uint16_t len)
 {
-    uint8_t *tx_buf = calloc(1, 1 + len);
-    uint8_t *rx_buf = malloc(1 + len);
-    if (!tx_buf || !rx_buf) { free(tx_buf); free(rx_buf); return -1; }
+    uint8_t tx_buf[32] = {0};
+    uint8_t rx_buf[32];
     tx_buf[0] = reg | 0x80;
     spi_transaction_t t = {
         .length = 8 * (1 + len),
         .tx_buffer = tx_buf,
         .rx_buffer = rx_buf,
     };
-    esp_err_t ret = spi_device_transmit(*(spi_device_handle_t *)handle, &t);
-    if (ret == ESP_OK) memcpy(bufp, rx_buf + 1, len);
-    free(tx_buf);
-    free(rx_buf);
-    return (ret == ESP_OK) ? 0 : -1;
+    if (spi_device_transmit(*(spi_device_handle_t *)handle, &t) != ESP_OK) return -1;
+    memcpy(bufp, rx_buf + 1, len);
+    return 0;
 }
 
 static void platform_delay(uint32_t ms)

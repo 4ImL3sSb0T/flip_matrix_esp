@@ -20,8 +20,8 @@ void imu_dsp_process(void *pvParameter) {
         size_t n = xStreamBufferReceive(acc_buf, batch, sizeof(batch), pdMS_TO_TICKS(50));
         if (n > 0) {
             int count = n / sizeof(vec3f);
-            ESP_LOGI(TAG, "acc: %d samples", count);
-            // DSP 处理...
+            
         }
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
