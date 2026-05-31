@@ -29,6 +29,7 @@ extern volatile float q0, q1, q2, q3;	// 表示传感器坐标系相对于辅助
 void MadgwickAHRSupdate(float gx, float gy, float gz, float ax, float ay, float az, float mx, float my, float mz);
 void MadgwickAHRSupdateIMU(float gx, float gy, float gz, float ax, float ay, float az);
 void MadgwickAHRS_getEuler(float* roll, float* pitch, float* yaw);
+void MadgwickAHRS_setSampleFreq(float freq);
 
 #endif
 //=====================================================================================================

@@ -3,6 +3,7 @@
 #include "FreeRTOS/FreeRTOS.h"
 #include "FreeRTOS/task.h"
 #include "FreeRTOS/semphr.h"
+#include "freertos/stream_buffer.h"
 #include "math.h"
 #include "esp_log.h"
 
@@ -12,6 +13,8 @@ uint16_t IMU_EVENT_BASE_ID;
 
 static imu_sensor_t* imu_sensor_handler = NULL;
 static imu_mode_t imu_mode = IMU_SERVICE_WITHOUT_MAG;
+static imu_run_mode_t imu_run_mode = IMU_RUN_MODE_POLLING;
+static StreamBufferHandle_t imu_fifo_buffer = NULL;
 
 static TaskHandle_t imu_service_task_handle = NULL;
 static int queue_size = 1;
@@ -208,9 +211,51 @@ static void imu_service_task(void* dt) {
 }
 
 
+exit_code_t imu_service_set_run_mode(const imu_run_mode_t mode) {
+    imu_run_mode = mode;
+    return EXIT_OK;
+}
+
+// ── FIFO 模式任务 ──────────────────────────────────────────────────────────────
+// 从 BSP FIFO 批量读取原始 imu_sample_t，写入 ring buffer 供 DSP 任务消费
+// 不运行 Madgwick、不更新队列、不触发状态机
+
+#define IMU_FIFO_BATCH_MAX   120
+#define IMU_FIFO_BUFFER_SIZE (833 * 2 * sizeof(imu_sample_t))  // 2 秒深度
+
+static void imu_fifo_service_task(void *param)
+{
+    if (imu_sensor_handler == NULL) return;
+
+    // 初始化 FIFO 硬件
+    if (imu_sensor_handler->imu_fifo_init) {
+        imu_sensor_handler->imu_fifo_init();
+    }
+
+    imu_sample_t samples[IMU_FIFO_BATCH_MAX];
+
+    while (1) {
+        int32_t n = imu_sensor_handler->imu_fifo_read_samples(samples, IMU_FIFO_BATCH_MAX);
+        if (n <= 0) continue;
+
+        // 写入 ring buffer（DSP 任务从另一端读取）
+        if (imu_fifo_buffer) {
+            xStreamBufferSend(imu_fifo_buffer, samples, n * sizeof(imu_sample_t), 0);
+        }
+    }
+}
+
 exit_code_t imu_service_init(imu_sensor_t* imu_sensor) {
-    if (imu_sensor == NULL || imu_sensor->imu_init == NULL || imu_sensor->imu_get_acc == NULL ||
-        imu_sensor->imu_get_gyro == NULL || imu_sensor->imu_get_mag == NULL) return EXIT_INVALID_PARAM;
+    if (imu_sensor == NULL || imu_sensor->imu_init == NULL) return EXIT_INVALID_PARAM;
+
+    // 按模式校验 vtable
+    if (imu_run_mode == IMU_RUN_MODE_POLLING) {
+        if (imu_sensor->imu_get_acc == NULL || imu_sensor->imu_get_gyro == NULL ||
+            imu_sensor->imu_get_mag == NULL) return EXIT_INVALID_PARAM;
+    } else {
+        if (imu_sensor->imu_fifo_init == NULL || imu_sensor->imu_fifo_read_samples == NULL)
+            return EXIT_INVALID_PARAM;
+    }
 
     exit_code_t ret = eventbus_allocate_module_id(&IMU_EVENT_BASE_ID);
     if (ret != EXIT_OK) return ret;
@@ -219,13 +264,27 @@ exit_code_t imu_service_init(imu_sensor_t* imu_sensor) {
     imu_sensor_handler->is_initialized = true;
     imu_sensor_handler_semaphore = xSemaphoreCreateMutex();
     imu_data_queue = xQueueCreate(queue_size, sizeof(imu_data_t));
+
+    // FIFO 模式：创建 ring buffer
+    if (imu_run_mode == IMU_RUN_MODE_FIFO) {
+        imu_fifo_buffer = xStreamBufferCreate(IMU_FIFO_BUFFER_SIZE, sizeof(imu_sample_t));
+        if (!imu_fifo_buffer) return EXIT_FAIL;
+    }
+
     return EXIT_OK;
 }
 
 exit_code_t imu_service_start() {
     if (imu_sensor_handler == NULL) return EXIT_NOT_INITIALIZED;
-    const BaseType_t xTaskCreateStatus = xTaskCreate(imu_service_task, "IMU_Service", 4096, NULL, 1, &imu_service_task_handle);
-    if (xTaskCreateStatus != pdPASS) return EXIT_FAIL;
+    BaseType_t ret;
+
+    if (imu_run_mode == IMU_RUN_MODE_FIFO) {
+        ret = xTaskCreate(imu_fifo_service_task, "IMU_FIFO", 8192, NULL, 3, &imu_service_task_handle);
+    } else {
+        ret = xTaskCreate(imu_service_task, "IMU_Service", 4096, NULL, 1, &imu_service_task_handle);
+    }
+
+    if (ret != pdPASS) return EXIT_FAIL;
     return EXIT_OK;
 }
 
@@ -273,4 +332,8 @@ exit_code_t imu_service_set_mode(const imu_mode_t mode) {
     if (mode > IMU_SERVICE_WITHOUT_MAG) return EXIT_INVALID_PARAM;
     imu_mode = mode;
     return EXIT_OK;
+}
+
+StreamBufferHandle_t imu_service_get_fifo_buffer(void) {
+    return imu_fifo_buffer;
 }

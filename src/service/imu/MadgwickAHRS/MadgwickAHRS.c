@@ -27,7 +27,7 @@ extern "C" {
 //---------------------------------------------------------------------------------------------------
 // 定义
 
-#define sampleFreq	200.0f		// 采样频率，单位：Hz
+static float sampleFreq = 200.0f;		// 采样频率，单位：Hz（可通过 MadgwickAHRS_setSampleFreq 动态修改）
 #define betaDef		0.1f		// 2 * 比例增益
 #ifndef M_PI
 #define M_PI 3.14159265358979323846f
@@ -42,6 +42,10 @@ volatile float q0 = 1.0f, q1 = 0.0f, q2 = 0.0f, q3 = 0.0f;	// 表示传感器坐
 // 函数声明
 
 float invSqrt(float x);
+
+void MadgwickAHRS_setSampleFreq(float freq) {
+    sampleFreq = freq;
+}
 
 //====================================================================================================
 // 函数

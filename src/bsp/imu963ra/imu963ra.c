@@ -1,8 +1,10 @@
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 
 #include <stdbool.h>
+#include <string.h>
 
 #include "service/tools/vec_math.h"
 #include "service/tools/common_def.h"
@@ -160,6 +162,162 @@ static uint8_t imu963ra_mag_self_check(void)
     return return_state;
 }
 
+/* ── FIFO 模式 ────────────────────────────────────────────────────────────────── */
+
+#define DEG_TO_RAD 0.017453292519943295f
+static bool imu_initialized = false;
+
+// DMA 缓冲区（imu963ra_fifo_init 中分配，大小 IMU963RA_FIFO_MAX_READ_BYTES + 1）
+#define FIFO_MAX_READ_BYTES  (IMU963RA_FIFO_WATERMARK * IMU963RA_FIFO_FRAME_BYTES + 64)
+
+static uint8_t *spi_dma_tx_buf = NULL;
+static uint8_t *spi_dma_rx_buf = NULL;
+static SemaphoreHandle_t fifo_isr_semaphore = NULL;
+
+static void IRAM_ATTR imu963ra_int1_isr(void *arg)
+{
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xSemaphoreGiveFromISR(fifo_isr_semaphore, &xHigherPriorityTaskWoken);
+    if (xHigherPriorityTaskWoken) {
+        portYIELD_FROM_ISR();
+    }
+}
+
+static exit_code_t imu963ra_int1_setup(void)
+{
+    gpio_config_t io_conf = {
+        .pin_bit_mask = (1ULL << IMU963RA_INT1_PIN),
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_ENABLE,
+        .intr_type = GPIO_INTR_POSEDGE,
+    };
+    esp_err_t err = gpio_config(&io_conf);
+    if (err != ESP_OK) return EXIT_HW_FAILURE;
+
+    err = gpio_install_isr_service(0);
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        return EXIT_HW_FAILURE;
+    }
+
+    err = gpio_isr_handler_add(IMU963RA_INT1_PIN, imu963ra_int1_isr, NULL);
+    if (err != ESP_OK) return EXIT_HW_FAILURE;
+
+    return EXIT_OK;
+}
+
+exit_code_t imu963ra_fifo_init(void)
+{
+    if (!imu_initialized) return EXIT_NOT_INITIALIZED;
+
+    // 创建 ISR 信号量
+    fifo_isr_semaphore = xSemaphoreCreateBinary();
+    if (!fifo_isr_semaphore) return EXIT_FAIL;
+
+    // 分配 DMA 缓冲区
+    spi_dma_tx_buf = heap_caps_malloc(FIFO_MAX_READ_BYTES + 1, MALLOC_CAP_DMA);
+    spi_dma_rx_buf = heap_caps_malloc(FIFO_MAX_READ_BYTES + 1, MALLOC_CAP_DMA);
+    if (!spi_dma_tx_buf || !spi_dma_rx_buf) {
+        free(spi_dma_tx_buf); spi_dma_tx_buf = NULL;
+        free(spi_dma_rx_buf); spi_dma_rx_buf = NULL;
+        vSemaphoreDelete(fifo_isr_semaphore); fifo_isr_semaphore = NULL;
+        return EXIT_FAIL;
+    }
+
+    // 配置 FIFO 寄存器
+    imu963ra_write_acc_gyro_register(IMU963RA_FIFO_CTRL4, 0x00);   // 先切到 Bypass 模式
+    imu963ra_write_acc_gyro_register(IMU963RA_FIFO_CTRL1, 0x64);   // WTM[7:0] = 100
+    imu963ra_write_acc_gyro_register(IMU963RA_FIFO_CTRL2, 0x00);   // WTM8 = 0，无压缩
+    imu963ra_write_acc_gyro_register(IMU963RA_FIFO_CTRL3, 0x77);   // BDR_GY=833Hz, BDR_XL=833Hz
+    imu963ra_write_acc_gyro_register(IMU963RA_FIFO_CTRL4, 0x06);   // Continuous 模式
+
+    // 配置 INT1 中断：仅 FIFO watermark
+    imu963ra_write_acc_gyro_register(IMU963RA_INT1_CTRL, 0x08);
+
+    // 配置 GPIO 中断
+    if (imu963ra_int1_setup() != EXIT_OK) {
+        free(spi_dma_tx_buf); spi_dma_tx_buf = NULL;
+        free(spi_dma_rx_buf); spi_dma_rx_buf = NULL;
+        vSemaphoreDelete(fifo_isr_semaphore); fifo_isr_semaphore = NULL;
+        return EXIT_HW_FAILURE;
+    }
+
+    return EXIT_OK;
+}
+
+int32_t imu963ra_fifo_read_samples(imu_sample_t *samples, uint32_t max_samples)
+{
+    if (!imu_initialized || !samples || max_samples == 0 || !fifo_isr_semaphore) return -1;
+
+    // 阻塞等待 watermark 中断
+    if (xSemaphoreTake(fifo_isr_semaphore, pdMS_TO_TICKS(500)) != pdTRUE) {
+        return 0;  // 超时，无数据
+    }
+
+    // 读 FIFO_STATUS1/2 获取未读帧数
+    uint8_t status[2];
+    imu963ra_read_acc_gyro_registers(IMU963RA_FIFO_STATUS1, status, 2);
+    uint16_t fifo_words = (uint16_t)((status[1] & 0x03) << 8) | status[0];
+    if (fifo_words == 0) return 0;
+
+    // 限制读取量
+    if (fifo_words > max_samples * 2) fifo_words = max_samples * 2;  // 最多 2 帧/样本（gyro+acc）
+
+    // DMA 批量读取：从 FIFO_DATA_OUT_TAG (0x78) 一次读 fifo_words * 7 字节
+    uint32_t total_bytes = fifo_words * IMU963RA_FIFO_FRAME_BYTES;
+    spi_dma_tx_buf[0] = IMU963RA_FIFO_DATA_OUT_TAG | IMU963RA_SPI_R;
+    memset(spi_dma_tx_buf + 1, 0x00, total_bytes);
+
+    spi_transaction_t t = {
+        .length = 8 * (total_bytes + 1),
+        .tx_buffer = spi_dma_tx_buf,
+        .rx_buffer = spi_dma_rx_buf,
+    };
+    ESP_ERROR_CHECK(spi_device_transmit(spi, &t));
+
+    // 逐帧解析 tag，跟踪最后的 acc/gyro，配对输出
+    vec3f last_acc = {0}, last_gyro = {0};
+    bool has_acc = false, has_gyro = false;
+    int32_t sample_count = 0;
+
+    for (uint32_t i = 0; i < fifo_words && sample_count < (int32_t)max_samples; i++) {
+        uint8_t *f = spi_dma_rx_buf + 1 + i * IMU963RA_FIFO_FRAME_BYTES;  // +1 跳过 dummy byte
+        uint8_t tag = f[0] >> 3;  // TAG_SENSOR 在 bits[7:3]
+
+        int16_t x = (int16_t)((uint16_t)f[2] << 8 | f[1]);
+        int16_t y = (int16_t)((uint16_t)f[4] << 8 | f[3]);
+        int16_t z = (int16_t)((uint16_t)f[6] << 8 | f[5]);
+
+        if (tag == IMU963RA_TAG_ACCEL_NC) {
+            last_acc.x = (float)x / imu963ra_transition_factor[0];
+            last_acc.y = (float)y / imu963ra_transition_factor[0];
+            last_acc.z = (float)z / imu963ra_transition_factor[0];
+            has_acc = true;
+        } else if (tag == IMU963RA_TAG_GYRO_NC) {
+            last_gyro.x = ((float)x / imu963ra_transition_factor[1]) * DEG_TO_RAD;
+            last_gyro.y = ((float)y / imu963ra_transition_factor[1]) * DEG_TO_RAD;
+            last_gyro.z = ((float)z / imu963ra_transition_factor[1]) * DEG_TO_RAD;
+            has_gyro = true;
+        }
+
+        // 两者都有时输出一个配对样本
+        if (has_acc && has_gyro) {
+            samples[sample_count].acc = last_acc;
+            samples[sample_count].gyro = last_gyro;
+            sample_count++;
+            has_acc = false;
+            has_gyro = false;
+        }
+    }
+
+    return sample_count;
+}
+
+uint32_t imu963ra_get_odr_hz(void)
+{
+    return IMU963RA_ODR_HZ;
+}
+
 /* ── Public API ─────────────────────────────────────────────────────── */
 
 int16_t imu963ra_gyro_x, imu963ra_gyro_y, imu963ra_gyro_z;
@@ -201,8 +359,6 @@ void imu963ra_get_mag(void)
     }
     imu963ra_write_acc_gyro_register(IMU963RA_FUNC_CFG_ACCESS, 0x00);
 }
-
-static bool imu_initialized = false;
 
 exit_code_t imu963ra_init(void)
 {
@@ -355,6 +511,16 @@ exit_code_t imu963ra_init(void)
 
 exit_code_t imu963ra_deinit(void)
 {
+    // 清理 FIFO 资源（如果已初始化）
+    if (fifo_isr_semaphore) {
+        imu963ra_write_acc_gyro_register(IMU963RA_INT1_CTRL, 0x00);
+        imu963ra_write_acc_gyro_register(IMU963RA_FIFO_CTRL4, 0x00);
+        gpio_isr_handler_remove(IMU963RA_INT1_PIN);
+        free(spi_dma_tx_buf); spi_dma_tx_buf = NULL;
+        free(spi_dma_rx_buf); spi_dma_rx_buf = NULL;
+        vSemaphoreDelete(fifo_isr_semaphore); fifo_isr_semaphore = NULL;
+    }
+
     imu963ra_write_acc_gyro_register(IMU963RA_CTRL3_C, 0x01);
     imu963ra_write_acc_gyro_register(IMU963RA_FUNC_CFG_ACCESS, 0x40);
     imu963ra_write_acc_gyro_register(IMU963RA_MASTER_CONFIG, 0x00);
@@ -362,8 +528,6 @@ exit_code_t imu963ra_deinit(void)
     imu_initialized = false;
     return EXIT_OK;
 }
-
-#define DEG_TO_RAD 0.017453292519943295f
 
 exit_code_t imu963ra_read_acc(vec3f *acc)
 {

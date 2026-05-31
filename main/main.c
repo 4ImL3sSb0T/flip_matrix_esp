@@ -94,54 +94,6 @@ static void cpu_monitor_task(void *arg)
     }
 }
 
-void led_task(void *pvParameter)
-{
-    led_strip_config_t strip_config = {
-        .strip_gpio_num = GPIO_NUM_48, // The GPIO that connected to the LED strip's data line
-        .max_leds = 1,      // The number of LEDs in the strip,
-        .led_model = LED_MODEL_WS2812,        // LED strip model
-        .color_component_format = LED_STRIP_COLOR_COMPONENT_FMT_GRB, // The color order of the strip: GRB
-        .flags = {
-            .invert_out = false, // don't invert the output signal
-        }
-    };
-    led_strip_rmt_config_t rmt_config = {
-        .clk_src = RMT_CLK_SRC_DEFAULT,
-        .resolution_hz = 10 * 1000 * 1000, // 10MHz resolution, 1 tick = 0.1us (led strip needs a high resolution)
-        .mem_block_symbols = 0, // let the driver choose a proper memory block size automatically
-        .flags = {
-            .with_dma = false,
-        }
-    };
-
-    led_strip_handle_t led_strip;
-    ESP_ERROR_CHECK(led_strip_new_rmt_device(&strip_config, &rmt_config, &led_strip));
-    ESP_LOGI("example", "Created LED strip object with RMT backend");
-
-    int hue = 0, saturation = 255, value = 100;
-    static int count = 0;
-    while (1) {
-        esp_err_t err;
-        err = led_strip_set_pixel_hsv(led_strip, 0, hue, saturation, value);
-        if (err != ESP_OK) { ESP_LOGE("example", "set_pixel failed: %s", esp_err_to_name(err)); }
-        err = led_strip_refresh(led_strip);
-        if (err != ESP_OK) { ESP_LOGE("example", "refresh failed: %s", esp_err_to_name(err)); }
-        vTaskDelay(pdTICKS_TO_MS(20));
-
-        err = led_strip_clear(led_strip);
-        if (err != ESP_OK) { ESP_LOGE("example", "clear failed: %s", esp_err_to_name(err)); }
-        err = led_strip_refresh(led_strip);
-        if (err != ESP_OK) { ESP_LOGE("example", "refresh2 failed: %s", esp_err_to_name(err)); }
-
-        hue = (hue + 1) % 360;
-        // saturation = (saturation + 10) % 255;
-        // value = (value + 51) % 255;
-        
-        ESP_LOGI("LED", "Updated LED color to R:%d, G:%d, B:%d", hue, saturation, value);
-        ESP_LOGI("LED", "LED task running... Count: %d", count++);
-    }
-}
-
 // ── TCP server 回调（留空，由用户填充业务逻辑）──────────────────────────────
 static void tcp_on_data(int client_sock, const char *data, int len)
 {
@@ -161,31 +113,6 @@ static void tcp_on_disconnect(int client_sock)
 void start_flip_task(void *pvParameter)
 {
 
-    wifi_service_init();
-    wifi_service_start();
-
-    static tcp_server_callbacks_t tcp_cbs = {
-        .on_data       = tcp_on_data,
-        .on_connect    = tcp_on_connect,
-        .on_disconnect = tcp_on_disconnect,
-    };
-    tcp_server_init(8080, &tcp_cbs);
-    tcp_server_start();
-
-    shell_port_init();
-    shell_port_start();
-
-    static imu_sensor_t imu963ra_sensor = {
-        .imu_init = imu963ra_init,
-        .imu_deinit = imu963ra_deinit,
-        .imu_get_acc = imu963ra_read_acc,
-        .imu_get_gyro = imu963ra_read_gyro,
-        .imu_get_mag = imu963ra_read_mag,
-        .is_initialized = false,
-    };
-    imu_service_init(&imu963ra_sensor);
-    imu_service_start();
-
     app_water_sim_init();
     app_water_sim_start();
 
@@ -201,9 +128,40 @@ void start_flip_task(void *pvParameter)
 void app_main(void)
 {
     eventbus_init(16, 12, 4096);
+
     uart_async_init();
     uart_async_start();
-    // xTaskCreatePinnedToCore(led_task, "led_task", 4096, NULL, 5, NULL, 1);
+
+    wifi_service_init();
+    wifi_service_start();
+
+    static tcp_server_callbacks_t tcp_cbs = {
+        .on_data       = tcp_on_data,
+        .on_connect    = tcp_on_connect,
+        .on_disconnect = tcp_on_disconnect,
+    };
+
+    tcp_server_init(8080, &tcp_cbs);
+    tcp_server_start();
+
+    shell_port_init();
+    shell_port_start();
+
+    static imu_sensor_t imu963ra_sensor = {
+        .imu_init = imu963ra_init,
+        .imu_deinit = imu963ra_deinit,
+        .imu_get_acc = imu963ra_read_acc,
+        .imu_get_gyro = imu963ra_read_gyro,
+        .imu_get_mag = imu963ra_read_mag,
+        .imu_fifo_init = imu963ra_fifo_init,
+        .imu_fifo_read_samples = imu963ra_fifo_read_samples,
+        .imu_get_odr_hz = imu963ra_get_odr_hz,
+        .is_initialized = false,
+    };
+    imu_service_set_run_mode(IMU_RUN_MODE_FIFO);  // 默认轮询模式，FIFO 改为 IMU_RUN_MODE_FIFO
+    imu_service_init(&imu963ra_sensor);
+    imu_service_start();
+
     xTaskCreatePinnedToCore(start_flip_task, "flip_task", 4096, NULL, 5, NULL, 1);
     xTaskCreatePinnedToCore(cpu_monitor_task, "cpu_mon", 4096, NULL, 3, NULL, 0);
     while (1) {

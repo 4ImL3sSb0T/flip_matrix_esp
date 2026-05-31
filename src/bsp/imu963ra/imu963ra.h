@@ -91,6 +91,17 @@ typedef enum
 
 #define IMU963RA_TIMEOUT_COUNT                      ( 0x00FF )                  // IMU963RA 超时计数
 
+// ── FIFO 配置 ──────────────────────────────────────────────────────────────────
+#define IMU963RA_INT1_PIN                           ( GPIO_NUM_14 )             // FIFO watermark 中断引脚
+#define IMU963RA_FIFO_WATERMARK                     ( 100 )                     // 水印帧数（每帧 7 字节）
+#define IMU963RA_FIFO_FRAME_BYTES                   ( 7 )                       // 每帧: TAG(1) + DATA(6)
+#define IMU963RA_ODR_HZ                             ( 833 )                     // FIFO 模式 ODR
+
+// TAG_SENSOR 值（从 FIFO_DATA_OUT_TAG 字节 >> 3 提取）
+#define IMU963RA_TAG_GYRO_NC                        ( 0x01 )                    // 陀螺仪 非压缩
+#define IMU963RA_TAG_ACCEL_NC                       ( 0x02 )                    // 加速度计 非压缩
+#define IMU963RA_TAG_TIMESTAMP                      ( 0x04 )                    // 时间戳
+
 //================================================定义 IMU963RA 内部地址================================================
 #define IMU963RA_DEV_ADDR                           ( 0x6B )                    // SA0接地：0x6A SA0上拉：0x6B 模块默认上拉
 #define IMU963RA_SPI_W                              ( 0x00 )
@@ -262,5 +273,24 @@ exit_code_t imu963ra_deinit(void);
 exit_code_t imu963ra_read_acc(vec3f *acc);
 exit_code_t imu963ra_read_gyro(vec3f *gyro);
 exit_code_t imu963ra_read_mag(vec3f *mag);
+
+// ── FIFO 模式 API ──────────────────────────────────────────────────────────────
+
+// FIFO 输出样本（acc + gyro 配对，物理单位）
+typedef struct {
+    vec3f acc;      // 加速度，单位: g
+    vec3f gyro;     // 角速度，单位: rad/s
+} imu_sample_t;
+
+// 初始化 FIFO 模式（GPIO 中断 + 寄存器配置 + DMA 缓冲区）
+// 调用前 imu963ra_init() 必须已成功执行
+exit_code_t imu963ra_fifo_init(void);
+
+// 阻塞等待 FIFO watermark 中断，读取并解析所有可用帧
+// 返回配对好的样本数写入 samples，max_samples 为缓冲区容量
+int32_t imu963ra_fifo_read_samples(imu_sample_t *samples, uint32_t max_samples);
+
+// 获取当前配置的 ODR（Hz）
+uint32_t imu963ra_get_odr_hz(void);
 
 #endif
