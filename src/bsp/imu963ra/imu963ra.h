@@ -274,6 +274,9 @@ exit_code_t imu963ra_read_acc(vec3f *acc);
 exit_code_t imu963ra_read_gyro(vec3f *gyro);
 exit_code_t imu963ra_read_mag(vec3f *mag);
 
+#include "driver/spi_master.h"
+spi_device_handle_t imu963ra_get_spi_handle(void);
+
 // ── FIFO 模式 API ──────────────────────────────────────────────────────────────
 
 // FIFO 输出样本（acc + gyro 配对，物理单位）

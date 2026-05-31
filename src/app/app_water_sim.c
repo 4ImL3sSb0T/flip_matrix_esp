@@ -1,5 +1,6 @@
 #include "app_water_sim.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/stream_buffer.h"
 #include <math.h>
 #include "service/imu/imu_service.h"
 #include "service/cli/log/log.h"
@@ -30,43 +31,23 @@ static color_scheme_t s_color_scheme = COLOR_RAINBOW;
 static float s_dt = SIM_DT;
 static float s_brightness = 0.2f;
 
+// 从 ring buffer 读取最新样本（丢弃旧数据）
+static vec3f ring_buf_read_latest(StreamBufferHandle_t buf)
+{
+    vec3f sample = {0};
+    vec3f tmp;
+    while (xStreamBufferReceive(buf, &tmp, sizeof(vec3f), 0) == sizeof(vec3f)) {
+        sample = tmp;
+    }
+    return sample;
+}
+
 /* -------------------------------------------------------------------------- */
 /* 私有状态                                                                     */
 /* -------------------------------------------------------------------------- */
 static FlipFluid *s_fluid;
 static TaskHandle_t s_task_handle;
 static float s_led_grid[VISIBLE_RES * VISIBLE_RES];
-
-
-static void imu_event_handler(const eventbus_event_t *evt, void *user_ctx) {
-    // const imu_data_t *data = (const imu_data_t *)evt->payload; // TODO: 需要时再使用
-    switch (evt->id.event_id) {
-        case IMU_EVENT_SLEEP:
-            ESP_LOGI("app_water_sim", "Received IMU_EVENT_SLEEP");
-            break;
-        case IMU_EVENT_WAKE_UP:
-            ESP_LOGI("app_water_sim", "Received IMU_EVENT_WAKE_UP");
-            break;
-        case IMU_EVENT_FALLING:
-            ESP_LOGI("app_water_sim", "Received IMU_EVENT_FALLING");
-            break;
-        case IMU_EVENT_FLIP:
-            ESP_LOGI("app_water_sim", "Received IMU_EVENT_FLIP");
-            break;
-        case IMU_EVENT_SHAKE:
-            ESP_LOGI("app_water_sim", "Received IMU_EVENT_SHAKE");
-            break;
-        case IMU_EVENT_TAP:
-            if (s_brightness > 0.9f) s_brightness = 0.1f;
-            else s_brightness += 0.1f;
-            app_water_sim_set_brightness(s_brightness);
-            ESP_LOGI("app_water_sim", "Received IMU_EVENT_TAP");
-            break;
-        case IMU_EVENT_ROTATING:
-            ESP_LOGI("app_water_sim", "Received IMU_EVENT_ROTATING");
-            break;
-    }
-}
 /* -------------------------------------------------------------------------- */
 /* 颜色映射                                                                     */
 /* -------------------------------------------------------------------------- */
@@ -127,8 +108,7 @@ static void water_sim_task(void *param) {
 
     for (;;) {
         float dt = s_dt;
-        vec3f acc, gyro, meg;
-        imu_service_get_raw_data(&acc, &gyro, &meg);
+        vec3f acc = ring_buf_read_latest(imu_service_get_acc_buffer());
 
         float gx = acc.x;
         float gy = acc.y;
@@ -166,8 +146,6 @@ exit_code_t app_water_sim_init(void) {
 
     flip_set_solver_quality(s_fluid, 4, 12, 0.6f);
     flip_set_gravity_scale(s_fluid, 9.81f);
-
-    eventbus_subscribe(eventbus_make_event_id(IMU_EVENT_BASE_ID, EVENTBUS_EVENT_ID_ALL), imu_event_handler, NULL);
 
     return EXIT_OK;
 }

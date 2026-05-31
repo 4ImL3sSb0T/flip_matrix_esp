@@ -112,20 +112,11 @@ static void tcp_on_disconnect(int client_sock)
 
 void start_flip_task(void *pvParameter)
 {
-
     app_water_sim_init();
     app_water_sim_start();
-
-    while (1) {
-        vec3f euler;
-        imu_service_get_euler(&euler);
-        ESP_LOGI("IMU", "Euler angles: Roll: %.2f, Pitch: %.2f, Yaw: %.2f", euler.x, euler.y, euler.z);
-        vTaskDelay(pdTICKS_TO_MS(200));
-    }
+    vTaskDelete(NULL);
 }
 
-
-extern void lsm6dsr_fifo(void);
 
 void app_main(void)
 {
@@ -149,17 +140,20 @@ void app_main(void)
     shell_port_init();
     shell_port_start();
 
-    // static imu_sensor_t imu963ra_sensor = { ... };
-    // imu_service_init(&imu963ra_sensor);
-    // imu_service_start();
-    // xTaskCreatePinnedToCore(start_flip_task, "flip_task", 4096, NULL, 5, NULL, 1);
+    // IMU 服务（FIFO 轮询，数据写入 ring buffer）
+    static imu_sensor_t imu963ra_sensor = {
+        .imu_init = imu963ra_init,
+        .imu_deinit = imu963ra_deinit,
+        .imu_get_mag = imu963ra_read_mag,
+    };
+    imu_service_init(&imu963ra_sensor);
+    imu_service_start();
 
-    // 测试 ST 官方 FIFO 例程
-    xTaskCreatePinnedToCore((TaskFunction_t)lsm6dsr_fifo, "fifo_test", 8192, NULL, 5, NULL, 1);
-
+    // 流体仿真（从 ring buffer 读取 IMU 数据）
+    xTaskCreatePinnedToCore(start_flip_task, "flip_task", 4096, NULL, 5, NULL, 1);
     xTaskCreatePinnedToCore(cpu_monitor_task, "cpu_mon", 4096, NULL, 3, NULL, 0);
+
     while (1) {
-        // ESP_LOGI("main", "Main task running... Count: %d", count++);
         vTaskDelay(pdTICKS_TO_MS(10));
     }
 }

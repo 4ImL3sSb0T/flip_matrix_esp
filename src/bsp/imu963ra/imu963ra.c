@@ -558,3 +558,8 @@ exit_code_t imu963ra_read_mag(vec3f *mag)
     mag->z = (float)imu963ra_mag_z / imu963ra_transition_factor[2];
     return EXIT_OK;
 }
+
+spi_device_handle_t imu963ra_get_spi_handle(void)
+{
+    return spi;
+}
