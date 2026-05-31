@@ -55,7 +55,8 @@
       "Bash(curl *)",
       "Bash(Get-ChildItem \"D:\\\\Project\\\\Esp32s3_LEDPan\\\\tools\\\\data_process\" -Recurse)",
       "Bash(Select-Object FullName, Length)",
-      "Bash(uv add *)"
+      "Bash(uv add *)",
+      "Bash(uv run *)"
     ]
   }
 }
