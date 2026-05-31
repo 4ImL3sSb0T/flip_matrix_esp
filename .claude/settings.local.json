@@ -56,7 +56,9 @@
       "Bash(Get-ChildItem \"D:\\\\Project\\\\Esp32s3_LEDPan\\\\tools\\\\data_process\" -Recurse)",
       "Bash(Select-Object FullName, Length)",
       "Bash(uv add *)",
-      "Bash(uv run *)"
+      "Bash(uv run *)",
+      "Bash(python -c \"from src.visualizer import DynamicFFTPlotter; print\\('import ok'\\)\")",
+      "Bash(python *)"
     ]
   }
 }
