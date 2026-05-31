@@ -26,6 +26,11 @@ void imu_dsp_process(void *pvParameter) {
         size_t count = bytes / sizeof(vec3f);
         total += count;
 
+        // EasyHEX 协议：原始 float 数据 + NaN 帧尾
+        static const uint32_t footer = 0xFFFFFFFF;  // NaN，帧尾
+        tcp_server_broadcast(batch, bytes);
+        tcp_server_broadcast(&footer, sizeof(footer));
+
         if (xTaskGetTickCount() - last_print >= pdMS_TO_TICKS(1000)) {
             ESP_LOGI(TAG, "acc samples/s: %d", total);
             total = 0;
