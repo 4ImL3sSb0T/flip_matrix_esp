@@ -108,6 +108,18 @@ static void imu_fifo_task(void *arg)
 
     ESP_LOGI(TAG, "FIFO task started: ODR=6667Hz, watermark=%d, poll=5ms", IMU_FIFO_WATERMARK);
 
+    // DMA 缓冲区一次性分配（最大 watermark × 7 字节 + 1）
+    const uint32_t max_payload = IMU_FIFO_WATERMARK * 7;
+    const uint32_t max_total = 1 + max_payload;
+    uint8_t *tx_buf = heap_caps_malloc(max_total, MALLOC_CAP_DMA);
+    uint8_t *rx_buf = heap_caps_malloc(max_total, MALLOC_CAP_DMA);
+    if (!tx_buf || !rx_buf) {
+        ESP_LOGE(TAG, "DMA buffer alloc failed!");
+        vTaskDelete(NULL);
+        return;
+    }
+    tx_buf[0] = 0x78 | 0x80;  // FIFO_DATA_OUT_TAG + SPI read bit，只需设一次
+
     // 主循环
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(5));
@@ -121,31 +133,19 @@ static void imu_fifo_task(void *arg)
         uint16_t num = 0;
         lsm6dsr_fifo_data_level_get(&s_dev_ctx, &num);
         if (num == 0) continue;
+        if (num > IMU_FIFO_WATERMARK) num = IMU_FIFO_WATERMARK;
 
         // 批量读取：一次 SPI 事务读 num 帧（每帧 7 字节：TAG + 6 DATA）
-        // FIFO_DATA_OUT_TAG (0x78) 自动递增，连续读出所有帧
         uint32_t payload = num * 7;
         uint32_t total = 1 + payload;
-        uint8_t *tx_buf = heap_caps_malloc(total, MALLOC_CAP_DMA);
-        uint8_t *rx_buf = heap_caps_malloc(total, MALLOC_CAP_DMA);
-        if (!tx_buf || !rx_buf) {
-            free(tx_buf); free(rx_buf);
-            continue;
-        }
-
-        tx_buf[0] = 0x78 | 0x80;  // FIFO_DATA_OUT_TAG + SPI read bit
         memset(tx_buf + 1, 0x00, payload);
         spi_transaction_t t = {
             .length = 8 * total,
             .tx_buffer = tx_buf,
             .rx_buffer = rx_buf,
         };
-        esp_err_t ret = spi_device_transmit(*(spi_device_handle_t *)s_dev_ctx.handle, &t);
-        free(tx_buf);
-        if (ret != ESP_OK) {
-            free(rx_buf);
+        if (spi_device_transmit(*(spi_device_handle_t *)s_dev_ctx.handle, &t) != ESP_OK)
             continue;
-        }
 
         // 内存中解析 tag，提取 acc 数据
         for (uint16_t i = 0; i < num; i++) {
@@ -163,10 +163,7 @@ static void imu_fifo_task(void *arg)
                 };
                 xMessageBufferSend(s_acc_ring_buf, &acc, sizeof(vec3f), 0);
             }
-            // gyro 和其他 tag 直接跳过（已在 rx_buf 中，不需要额外 SPI 读）
         }
-
-        free(rx_buf);
     }
 }
 

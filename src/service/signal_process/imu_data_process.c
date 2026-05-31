@@ -17,15 +17,14 @@ void imu_dsp_process(void *pvParameter) {
         return;
     }
 
-    vec3f batch[120];
+    static vec3f batch[256]; // 27ms的数据量
     int total = 0;
     TickType_t last_print = xTaskGetTickCount();
 
     while (1) {
-        size_t n = xMessageBufferReceive(acc_buf, batch, sizeof(batch), pdMS_TO_TICKS(50));
-        if (n > 0) {
-            total += n / sizeof(vec3f);
-        }
+        size_t bytes = xMessageBufferReceive(acc_buf, batch, sizeof(batch), portMAX_DELAY);
+        size_t count = bytes / sizeof(vec3f);
+        total += count;
 
         if (xTaskGetTickCount() - last_print >= pdMS_TO_TICKS(1000)) {
             ESP_LOGI(TAG, "acc samples/s: %d", total);
