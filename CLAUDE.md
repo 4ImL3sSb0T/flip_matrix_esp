@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ESP32-S3 LED 矩阵面板项目，基于 ESP-IDF v5.5.4。核心功能是运行 FLIP 流体仿真，并将结果实时渲染到 WS2812B LED 矩阵上，同时利用 IMU 传感器实现倾斜控制重力方向。
 
+## ESP-IDF
+
+- ESP-IDF 安装路径：`D:\Software\Esp\v5.5.4\esp-idf`
+
 ## Build Commands
 
 ```bash

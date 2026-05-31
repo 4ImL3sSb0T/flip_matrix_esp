@@ -20,6 +20,9 @@
 #include <stdlib.h>
 #include <service/signal_process/imu_data_process.h>
 
+#include "bsp/motor/motor.h"
+#include <math.h>
+
 // ── CPU 运行时监控 ──────────────────────────────────────────────────────────
 #define MON_TAG       "CPU"
 #define MON_BUF_SIZE  512
@@ -156,7 +159,21 @@ void app_main(void)
 
     xTaskCreatePinnedToCore(sp_process_task, "sp_process_task", 4096, NULL, 4, NULL, 1);
 
+    motor_config_t motor_cfg = {
+        .pwm_gpio = 21,
+        .dir_gpio = 20,
+        .channel = LEDC_CHANNEL_0,
+        .dir_invert = false,
+    };
+
+    exit_code_t ret = motor_init(&motor_cfg);
+    if (ret != EXIT_OK) {
+        ESP_LOGE("MAIN", "Failed to initialize motor");
+        return;
+    }
+
     while (1) {
+        motor_set_duty(LEDC_CHANNEL_0, -0.2f);  // 50% 占空比
         vTaskDelay(pdTICKS_TO_MS(10));
     }
 }
