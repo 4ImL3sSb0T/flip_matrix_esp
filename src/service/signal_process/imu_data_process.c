@@ -5,6 +5,7 @@
 #include "esp_log.h"
 #include <math.h>
 #include <string.h>
+#include "service/tcp/tcp_server.h"
 
 #define TAG "IMU_DSP"
 
