@@ -54,6 +54,10 @@ idf.py menuconfig
 - **`mpu6500/`** — MPU6500 传感器驱动（备用）
 - **`uart/`** — UART 异步收发驱动
 
+## 开发规范
+
+- **加功能之前先找例程代码**：使用第三方库（esp-dsp、led_strip 等）时，先看 `managed_components/` 下的 `examples/` 目录，模仿官方用法。找不到例程就搜索（MCP 工具或 WebSearch），不要凭记忆或主观臆断 API 用法。
+
 ## Key Conventions
 
 ### 返回码
