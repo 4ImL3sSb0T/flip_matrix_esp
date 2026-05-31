@@ -35,7 +35,8 @@ def process_frame(frame: np.ndarray, hann: np.ndarray) -> np.ndarray:
     buf -= slope * np.arange(len(buf), dtype=np.float32)
     buf *= hann
     spectrum = np.fft.rfft(buf, n=SP_FFT_SIZE)
-    return np.abs(spectrum[:SP_FREQ_BINS])
+    mag = np.abs(spectrum[:SP_FREQ_BINS])
+    return np.log10(mag + 1e-10)
 
 
 def sliding_window_fft(

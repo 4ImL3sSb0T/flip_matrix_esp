@@ -117,8 +117,7 @@ class CNNSampleViewer:
                 ax.clear()
                 spec = self.specs[key]
                 times = np.arange(self.n_frames) * (SP_HOP_SIZE / SP_SAMPLE_RATE)
-                spec_db = 20 * np.log10(spec.T + 1e-10)
-                ax.pcolormesh(times, freqs, spec_db, shading="auto", cmap="inferno")
+                ax.pcolormesh(times, freqs, spec.T, shading="auto", cmap="inferno")
                 # 高亮窗口
                 t0 = start * SP_HOP_SIZE / SP_SAMPLE_RATE
                 t1 = end * SP_HOP_SIZE / SP_SAMPLE_RATE
@@ -139,9 +138,9 @@ class CNNSampleViewer:
                 ax.clear()
                 ch_data = self.specs[key][start:end]  # (64, 512)
                 sample[key] = ch_data
-                ch_db = 20 * np.log10(ch_data.T + 1e-10)
+                # 数据已经是 log10 幅度，直接显示
                 im = ax.imshow(
-                    ch_db, aspect="auto", cmap="inferno",
+                    ch_data.T, aspect="auto", cmap="inferno",
                     origin="lower", interpolation="nearest",
                     extent=[0, self.sample_len, 0, SP_SAMPLE_RATE / 2],
                 )
@@ -150,16 +149,16 @@ class CNNSampleViewer:
 
             # ── 行 2 左: 合成 RGB ──
             self.ax_rgb.clear()
-            # 用 dB 谱归一化，percentile clip 防止离群值压暗
-            def norm_db(arr):
-                db = 20 * np.log10(arr.T + 1e-10)  # (512, 64) 频率×帧
-                lo, hi = np.percentile(db, [2, 98])
-                return np.clip((db - lo) / (hi - lo + 1e-10), 0, 1)
+            # 数据已是 log10 幅度，percentile clip 归一化到 0-1
+            def norm(arr):
+                t = arr.T  # (512, 64) 频率×帧
+                lo, hi = np.percentile(t, [2, 98])
+                return np.clip((t - lo) / (hi - lo + 1e-10), 0, 1)
 
             rgb = np.stack([
-                norm_db(sample["x"]),
-                norm_db(sample["y"]),
-                norm_db(sample["z"]),
+                norm(sample["x"]),
+                norm(sample["y"]),
+                norm(sample["z"]),
             ], axis=-1)  # (512, 64, 3)  纵轴=频率, 横轴=帧
             self.ax_rgb.imshow(
                 rgb, aspect="auto", origin="lower",
@@ -256,10 +255,9 @@ def plot_fft_analysis(
         axes[0, col].set_ylabel("加速度 (g)", fontproperties=_CN_FONT)
         axes[0, col].grid(True, alpha=0.3)
 
-        # 行 1: 频谱图
-        spec_db = 20 * np.log10(spec + 1e-10)
+        # 行 1: 频谱图（数据已是 log10 幅度）
         im = axes[1, col].pcolormesh(
-            times, freqs, spec_db.T, shading="auto", cmap="inferno",
+            times, freqs, spec.T, shading="auto", cmap="inferno",
         )
         axes[1, col].set_title(f"{label} 轴 频谱图", fontproperties=_CN_FONT)
         axes[1, col].set_xlabel("时间 (s)", fontproperties=_CN_FONT)
