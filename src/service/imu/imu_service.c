@@ -6,6 +6,7 @@
 #include "freertos/task.h"
 #include "freertos/message_buffer.h"
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 
 #define TAG "IMU_SVC"
 
@@ -105,7 +106,7 @@ static void imu_fifo_task(void *arg)
     // gpio_isr_handler_add(IMU963RA_INT1_PIN, imu_int1_isr, NULL);
     // ── 中断模式结束 ─────────────────────────────────────────────────────────
 
-    ESP_LOGI(TAG, "FIFO task started: ODR=6667Hz, watermark=%d, poll=50ms", IMU_FIFO_WATERMARK);
+    ESP_LOGI(TAG, "FIFO task started: ODR=6667Hz, watermark=%d, poll=5ms", IMU_FIFO_WATERMARK);
 
     // 主循环
     while (1) {
@@ -119,34 +120,53 @@ static void imu_fifo_task(void *arg)
 
         uint16_t num = 0;
         lsm6dsr_fifo_data_level_get(&s_dev_ctx, &num);
+        if (num == 0) continue;
 
-        while (num--) {
-            lsm6dsr_fifo_tag_t tag;
-            lsm6dsr_fifo_sensor_tag_get(&s_dev_ctx, &tag);
-            uint8_t raw[6];
-
-            switch (tag) {
-            case LSM6DSR_XL_NC_TAG:
-                lsm6dsr_fifo_out_raw_get(&s_dev_ctx, raw);
-                {
-                    int16_t x = (int16_t)((uint16_t)raw[1] << 8 | raw[0]);
-                    int16_t y = (int16_t)((uint16_t)raw[3] << 8 | raw[2]);
-                    int16_t z = (int16_t)((uint16_t)raw[5] << 8 | raw[4]);
-                    vec3f acc = {
-                        .x = lsm6dsr_from_fs8g_to_mg(x) / 1000.0f,
-                        .y = lsm6dsr_from_fs8g_to_mg(y) / 1000.0f,
-                        .z = lsm6dsr_from_fs8g_to_mg(z) / 1000.0f,
-                    };
-                    xMessageBufferSend(s_acc_ring_buf, &acc, sizeof(vec3f), 0);
-                }
-                break;
-
-            default:
-                // gyro 和其他 tag 全部丢弃
-                lsm6dsr_fifo_out_raw_get(&s_dev_ctx, raw);
-                break;
-            }
+        // 批量读取：一次 SPI 事务读 num 帧（每帧 7 字节：TAG + 6 DATA）
+        // FIFO_DATA_OUT_TAG (0x78) 自动递增，连续读出所有帧
+        uint32_t payload = num * 7;
+        uint32_t total = 1 + payload;
+        uint8_t *tx_buf = heap_caps_malloc(total, MALLOC_CAP_DMA);
+        uint8_t *rx_buf = heap_caps_malloc(total, MALLOC_CAP_DMA);
+        if (!tx_buf || !rx_buf) {
+            free(tx_buf); free(rx_buf);
+            continue;
         }
+
+        tx_buf[0] = 0x78 | 0x80;  // FIFO_DATA_OUT_TAG + SPI read bit
+        memset(tx_buf + 1, 0x00, payload);
+        spi_transaction_t t = {
+            .length = 8 * total,
+            .tx_buffer = tx_buf,
+            .rx_buffer = rx_buf,
+        };
+        esp_err_t ret = spi_device_transmit(*(spi_device_handle_t *)s_dev_ctx.handle, &t);
+        free(tx_buf);
+        if (ret != ESP_OK) {
+            free(rx_buf);
+            continue;
+        }
+
+        // 内存中解析 tag，提取 acc 数据
+        for (uint16_t i = 0; i < num; i++) {
+            uint8_t *f = rx_buf + 1 + i * 7;  // +1 跳过 dummy byte
+            uint8_t tag = f[0] >> 3;  // tag_sensor 在 bits[7:3]
+
+            if (tag == LSM6DSR_XL_NC_TAG) {
+                int16_t x = (int16_t)((uint16_t)f[2] << 8 | f[1]);
+                int16_t y = (int16_t)((uint16_t)f[4] << 8 | f[3]);
+                int16_t z = (int16_t)((uint16_t)f[6] << 8 | f[5]);
+                vec3f acc = {
+                    .x = lsm6dsr_from_fs8g_to_mg(x) / 1000.0f,
+                    .y = lsm6dsr_from_fs8g_to_mg(y) / 1000.0f,
+                    .z = lsm6dsr_from_fs8g_to_mg(z) / 1000.0f,
+                };
+                xMessageBufferSend(s_acc_ring_buf, &acc, sizeof(vec3f), 0);
+            }
+            // gyro 和其他 tag 直接跳过（已在 rx_buf 中，不需要额外 SPI 读）
+        }
+
+        free(rx_buf);
     }
 }
 
