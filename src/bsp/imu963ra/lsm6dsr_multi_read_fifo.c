@@ -153,10 +153,10 @@ void lsm6dsr_fifo(void)
   /* Set FIFO watermark (number of unread sensor data TAG + 6 bytes
    * stored in FIFO) to 10 samples
    */
-  lsm6dsr_fifo_watermark_set(&dev_ctx, 10);
-  /* Set FIFO batch XL/Gyro ODR to 12.5Hz */
-  lsm6dsr_fifo_xl_batch_set(&dev_ctx, LSM6DSR_XL_BATCHED_AT_12Hz5);
-  lsm6dsr_fifo_gy_batch_set(&dev_ctx, LSM6DSR_GY_BATCHED_AT_12Hz5);
+  lsm6dsr_fifo_watermark_set(&dev_ctx, 100);
+  /* Set FIFO batch XL/Gyro BDR to 6667Hz (max) */
+  lsm6dsr_fifo_xl_batch_set(&dev_ctx, LSM6DSR_XL_BATCHED_AT_6667Hz);
+  lsm6dsr_fifo_gy_batch_set(&dev_ctx, LSM6DSR_GY_BATCHED_AT_6667Hz);
   /* Set FIFO mode to Stream mode (aka Continuous Mode) */
   lsm6dsr_fifo_mode_set(&dev_ctx, LSM6DSR_STREAM_MODE);
   /* Enable drdy 75 μs pulse: uncomment if interrupt must be pulsed */
@@ -169,9 +169,9 @@ void lsm6dsr_fifo(void)
   //lsm6dsr_pin_int2_route_get(&dev_ctx, &int2_route);
   //int2_route.reg.int2_ctrl.int2_fifo_th = PROPERTY_ENABLE;
   //lsm6dsr_pin_int2_route_set(&dev_ctx, &int2_route);
-  /* Set Output Data Rate */
-  lsm6dsr_xl_data_rate_set(&dev_ctx, LSM6DSR_XL_ODR_12Hz5);
-  lsm6dsr_gy_data_rate_set(&dev_ctx, LSM6DSR_GY_ODR_12Hz5);
+  /* Set Output Data Rate to 6667Hz (max) */
+  lsm6dsr_xl_data_rate_set(&dev_ctx, LSM6DSR_XL_ODR_6667Hz);
+  lsm6dsr_gy_data_rate_set(&dev_ctx, LSM6DSR_GY_ODR_6667Hz);
 
   /* Wait samples. */
   while (1) {
@@ -183,7 +183,7 @@ void lsm6dsr_fifo(void)
     lsm6dsr_fifo_wtm_flag_get(&dev_ctx, &wmflag);
 
     if (wmflag == 0) {
-      vTaskDelay(pdMS_TO_TICKS(1));
+      vTaskDelay(pdMS_TO_TICKS(10));
       continue;
     }
     {
@@ -205,8 +205,8 @@ void lsm6dsr_fifo(void)
             acceleration_mg[2] =
               lsm6dsr_from_fs2g_to_mg(data_raw_acceleration.i16bit[2]);
             snprintf((char *)tx_buffer, sizeof(tx_buffer),
-                    "Acceleration [mg]:%4.2f\t%4.2f\t%4.2f\r\n",
-                    acceleration_mg[0], acceleration_mg[1], acceleration_mg[2]);
+                    "{Acceleration}%4.2f,%4.2f,%4.2f\n",
+                    acceleration_mg[0] / 1000.0, acceleration_mg[1] / 1000.0, acceleration_mg[2] / 1000.0);
             tx_com(tx_buffer, strlen((char const *)tx_buffer));
             break;
 
@@ -220,8 +220,8 @@ void lsm6dsr_fifo(void)
             angular_rate_mdps[2] =
               lsm6dsr_from_fs2000dps_to_mdps(data_raw_angular_rate.i16bit[2]);
             snprintf((char *)tx_buffer, sizeof(tx_buffer),
-                    "Angular rate [mdps]:%4.2f\t%4.2f\t%4.2f\r\n",
-                    angular_rate_mdps[0], angular_rate_mdps[1], angular_rate_mdps[2]);
+                    "{Angular}%4.2f,%4.2f,%4.2f\n",
+                    angular_rate_mdps[0] / 1000.0, angular_rate_mdps[1] / 1000.0, angular_rate_mdps[2] / 1000.0);
             tx_com(tx_buffer, strlen((char const *)tx_buffer));
             break;
 
