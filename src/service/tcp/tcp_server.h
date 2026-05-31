@@ -21,4 +21,7 @@ exit_code_t tcp_server_deinit(void);
 
 exit_code_t tcp_server_send(int client_sock, const void *data, int len);
 
+// 向所有已连接的客户端广播数据
+void tcp_server_broadcast(const void *data, int len);
+
 #endif

@@ -22,6 +22,7 @@ static TaskHandle_t s_task_handle = NULL;
 
 static uint16_t s_port = 0;
 static tcp_server_callbacks_t s_cbs = {0};
+static int s_clients[TCP_SERVER_MAX_CLIENTS];
 
 // ── WiFi 事件回调 ───────────────────────────────────────────────────────────
 
@@ -54,15 +55,15 @@ static void set_nonblocking(int sock)
     fcntl(sock, F_SETFL, flags | O_NONBLOCK);
 }
 
-static void close_all_clients(int *clients, int listen_sock)
+static void close_all_clients(int listen_sock)
 {
     for (int i = 0; i < TCP_SERVER_MAX_CLIENTS; i++) {
-        if (clients[i] != INVALID_SOCK) {
+        if (s_clients[i] != INVALID_SOCK) {
             if (s_cbs.on_disconnect) {
-                s_cbs.on_disconnect(clients[i]);
+                s_cbs.on_disconnect(s_clients[i]);
             }
-            close(clients[i]);
-            clients[i] = INVALID_SOCK;
+            close(s_clients[i]);
+            s_clients[i] = INVALID_SOCK;
         }
     }
     if (listen_sock != INVALID_SOCK) {
@@ -74,9 +75,8 @@ static void close_all_clients(int *clients, int listen_sock)
 
 static void tcp_server_task(void *arg)
 {
-    int clients[TCP_SERVER_MAX_CLIENTS];
     for (int i = 0; i < TCP_SERVER_MAX_CLIENTS; i++) {
-        clients[i] = INVALID_SOCK;
+        s_clients[i] = INVALID_SOCK;
     }
 
     while (1) {
@@ -127,10 +127,10 @@ static void tcp_server_task(void *arg)
             int max_fd = listen_sock;
 
             for (int i = 0; i < TCP_SERVER_MAX_CLIENTS; i++) {
-                if (clients[i] != INVALID_SOCK) {
-                    FD_SET(clients[i], &read_fds);
-                    if (clients[i] > max_fd) {
-                        max_fd = clients[i];
+                if (s_clients[i] != INVALID_SOCK) {
+                    FD_SET(s_clients[i], &read_fds);
+                    if (s_clients[i] > max_fd) {
+                        max_fd = s_clients[i];
                     }
                 }
             }
@@ -143,7 +143,7 @@ static void tcp_server_task(void *arg)
             if (xTaskNotifyWait(0, ULONG_MAX, &notify, 0) == pdTRUE) {
                 if (notify == TCP_NOTIFY_STOP) {
                     ESP_LOGW(TAG, "WiFi disconnected, closing server");
-                    close_all_clients(clients, listen_sock);
+                    close_all_clients(listen_sock);
                     listen_sock = INVALID_SOCK;
                     break;
                 }
@@ -151,7 +151,7 @@ static void tcp_server_task(void *arg)
 
             if (ret < 0) {
                 ESP_LOGE(TAG, "select() failed: errno %d", errno);
-                close_all_clients(clients, listen_sock);
+                close_all_clients(listen_sock);
                 listen_sock = INVALID_SOCK;
                 break;
             }
@@ -168,7 +168,7 @@ static void tcp_server_task(void *arg)
                 if (new_sock >= 0) {
                     int slot = -1;
                     for (int i = 0; i < TCP_SERVER_MAX_CLIENTS; i++) {
-                        if (clients[i] == INVALID_SOCK) {
+                        if (s_clients[i] == INVALID_SOCK) {
                             slot = i;
                             break;
                         }
@@ -176,7 +176,7 @@ static void tcp_server_task(void *arg)
 
                     if (slot >= 0) {
                         set_nonblocking(new_sock);
-                        clients[slot] = new_sock;
+                        s_clients[slot] = new_sock;
 
                         char ip_str[64];
                         get_client_ip(&source_addr, ip_str, sizeof(ip_str));
@@ -194,33 +194,33 @@ static void tcp_server_task(void *arg)
 
             // 处理已有客户端数据
             for (int i = 0; i < TCP_SERVER_MAX_CLIENTS; i++) {
-                if (clients[i] == INVALID_SOCK || !FD_ISSET(clients[i], &read_fds)) {
+                if (s_clients[i] == INVALID_SOCK || !FD_ISSET(s_clients[i], &read_fds)) {
                     continue;
                 }
 
                 char rx_buffer[256];
-                int len = recv(clients[i], rx_buffer, sizeof(rx_buffer) - 1, 0);
+                int len = recv(s_clients[i], rx_buffer, sizeof(rx_buffer) - 1, 0);
 
                 if (len > 0) {
                     rx_buffer[len] = '\0';
                     if (s_cbs.on_data) {
-                        s_cbs.on_data(clients[i], rx_buffer, len);
+                        s_cbs.on_data(s_clients[i], rx_buffer, len);
                     }
                 } else if (len == 0) {
-                    ESP_LOGI(TAG, "[sock=%d] Client disconnected", clients[i]);
+                    ESP_LOGI(TAG, "[sock=%d] Client disconnected", s_clients[i]);
                     if (s_cbs.on_disconnect) {
-                        s_cbs.on_disconnect(clients[i]);
+                        s_cbs.on_disconnect(s_clients[i]);
                     }
-                    close(clients[i]);
-                    clients[i] = INVALID_SOCK;
+                    close(s_clients[i]);
+                    s_clients[i] = INVALID_SOCK;
                 } else {
                     if (errno != EAGAIN && errno != EWOULDBLOCK) {
-                        ESP_LOGE(TAG, "[sock=%d] recv() error: errno %d", clients[i], errno);
+                        ESP_LOGE(TAG, "[sock=%d] recv() error: errno %d", s_clients[i], errno);
                         if (s_cbs.on_disconnect) {
-                            s_cbs.on_disconnect(clients[i]);
+                            s_cbs.on_disconnect(s_clients[i]);
                         }
-                        close(clients[i]);
-                        clients[i] = INVALID_SOCK;
+                        close(s_clients[i]);
+                        s_clients[i] = INVALID_SOCK;
                     }
                 }
             }
@@ -231,9 +231,9 @@ static void tcp_server_task(void *arg)
             close(listen_sock);
         }
         for (int i = 0; i < TCP_SERVER_MAX_CLIENTS; i++) {
-            if (clients[i] != INVALID_SOCK) {
-                close(clients[i]);
-                clients[i] = INVALID_SOCK;
+            if (s_clients[i] != INVALID_SOCK) {
+                close(s_clients[i]);
+                s_clients[i] = INVALID_SOCK;
             }
         }
     }
@@ -301,4 +301,13 @@ exit_code_t tcp_server_send(int client_sock, const void *data, int len)
         return EXIT_FAIL;
     }
     return EXIT_OK;
+}
+
+void tcp_server_broadcast(const void *data, int len)
+{
+    for (int i = 0; i < TCP_SERVER_MAX_CLIENTS; i++) {
+        if (s_clients[i] != INVALID_SOCK) {
+            send(s_clients[i], data, len, 0);
+        }
+    }
 }

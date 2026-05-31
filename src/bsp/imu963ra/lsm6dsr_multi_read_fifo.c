@@ -65,9 +65,9 @@
 
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
-#include "driver/uart.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "service/tcp/tcp_server.h"
 
 /* ESP32-S3 SPI pin configuration */
 #define IMU_SPI_HOST        SPI2_HOST
@@ -182,7 +182,11 @@ void lsm6dsr_fifo(void)
     /* Read watermark flag */
     lsm6dsr_fifo_wtm_flag_get(&dev_ctx, &wmflag);
 
-    if (wmflag > 0) {
+    if (wmflag == 0) {
+      vTaskDelay(pdMS_TO_TICKS(1));
+      continue;
+    }
+    {
       /* Read number of samples in FIFO */
       lsm6dsr_fifo_data_level_get(&dev_ctx, &num);
 
@@ -305,8 +309,8 @@ static int32_t platform_read(void *handle, uint8_t reg, uint8_t *bufp,
  */
 static void tx_com(uint8_t *tx_buffer, uint16_t len)
 {
-  /* Output via ESP-IDF UART0 (same as ESP_LOG) */
-  uart_write_bytes(UART_NUM_0, (const char *)tx_buffer, len);
+  /* Output via TCP to all connected clients */
+  tcp_server_broadcast(tx_buffer, len);
 }
 
 /*

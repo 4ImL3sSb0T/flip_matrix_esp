@@ -125,6 +125,8 @@ void start_flip_task(void *pvParameter)
 }
 
 
+extern void lsm6dsr_fifo(void);
+
 void app_main(void)
 {
     eventbus_init(16, 12, 4096);
@@ -147,22 +149,14 @@ void app_main(void)
     shell_port_init();
     shell_port_start();
 
-    static imu_sensor_t imu963ra_sensor = {
-        .imu_init = imu963ra_init,
-        .imu_deinit = imu963ra_deinit,
-        .imu_get_acc = imu963ra_read_acc,
-        .imu_get_gyro = imu963ra_read_gyro,
-        .imu_get_mag = imu963ra_read_mag,
-        .imu_fifo_init = imu963ra_fifo_init,
-        .imu_fifo_read_samples = imu963ra_fifo_read_samples,
-        .imu_get_odr_hz = imu963ra_get_odr_hz,
-        .is_initialized = false,
-    };
-    imu_service_set_run_mode(IMU_RUN_MODE_FIFO);  // 默认轮询模式，FIFO 改为 IMU_RUN_MODE_FIFO
-    imu_service_init(&imu963ra_sensor);
-    imu_service_start();
+    // static imu_sensor_t imu963ra_sensor = { ... };
+    // imu_service_init(&imu963ra_sensor);
+    // imu_service_start();
+    // xTaskCreatePinnedToCore(start_flip_task, "flip_task", 4096, NULL, 5, NULL, 1);
 
-    xTaskCreatePinnedToCore(start_flip_task, "flip_task", 4096, NULL, 5, NULL, 1);
+    // 测试 ST 官方 FIFO 例程
+    xTaskCreatePinnedToCore((TaskFunction_t)lsm6dsr_fifo, "fifo_test", 8192, NULL, 5, NULL, 1);
+
     xTaskCreatePinnedToCore(cpu_monitor_task, "cpu_mon", 4096, NULL, 3, NULL, 0);
     while (1) {
         // ESP_LOGI("main", "Main task running... Count: %d", count++);
