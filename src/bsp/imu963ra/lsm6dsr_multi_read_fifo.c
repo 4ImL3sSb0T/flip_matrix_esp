@@ -58,77 +58,26 @@
  * following target board and redefine yours.
  */
 
-//#define STEVAL_MKI109V3  /* little endian */
-//#define NUCLEO_F401RE    /* little endian */
-//#define SPC584B_DIS      /* big endian */
-
-/* ATTENTION: By default the driver is little endian. If you need switch
- *            to big endian please see "Endianness definitions" in the
- *            header file of the driver (_reg.h).
- */
-
-#if defined(STEVAL_MKI109D)
-/* MKI109D: Define communication interface */
-#define SENSOR_BUS hspi1
-
-/* MKI109D: Vdd and Vddio power supply values */
-#define LSM6DSV16X_VDD 1.8f
-#define LSM6DSV16X_VDDIO 1.8f
-
-#elif defined(STEVAL_MKI109V3)
-/* MKI109V3: Define communication interface */
-#define SENSOR_BUS hspi2
-/* MKI109V3: Vdd and Vddio power supply values */
-#define PWM_3V3 915
-
-#elif defined(NUCLEO_F401RE)
-/* NUCLEO_F401RE: Define communication interface */
-#define SENSOR_BUS hi2c1
-
-#elif defined(SPC584B_DIS)
-/* DISCOVERY_SPC584B: Define communication interface */
-#define SENSOR_BUS I2CD1
-
-#elif defined(NUCLEO_H503RB)
-/* NUCLEO_H503RB: Define communication interface */
-#define SENSOR_BUS hi3c1
-
-#endif
-
-
 /* Includes ------------------------------------------------------------------*/
 #include <string.h>
 #include <stdio.h>
 #include "lsm6dsr_reg.h"
 
-#if defined(NUCLEO_F401RE)
-#include "stm32f4xx_hal.h"
-#include "usart.h"
-#include "gpio.h"
-#include "i2c.h"
+#include "driver/spi_master.h"
+#include "driver/gpio.h"
+#include "driver/uart.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
-#elif defined(STEVAL_MKI109D)
-#include "board.h"
-#include "usbd_cdc_if.h"
+/* ESP32-S3 SPI pin configuration */
+#define IMU_SPI_HOST        SPI2_HOST
+#define IMU_SPI_MOSI_PIN    GPIO_NUM_11
+#define IMU_SPI_MISO_PIN    GPIO_NUM_12
+#define IMU_SPI_SCK_PIN     GPIO_NUM_13
+#define IMU_SPI_CS_PIN      GPIO_NUM_10
+#define IMU_SPI_FREQ_HZ     (10 * 1000 * 1000)  /* 10 MHz */
 
-#elif defined(STEVAL_MKI109V3)
-#include "stm32f4xx_hal.h"
-#include "usbd_cdc_if.h"
-#include "gpio.h"
-#include "spi.h"
-#include "tim.h"
-
-#elif defined(SPC584B_DIS)
-#include "components.h"
-
-#elif defined(NUCLEO_H503RB)
-#include "usart.h"
-#include "i3c.h"
-#include "i3c_api.h"
-#include <stdio.h>
-
-static uint8_t i3c_dyn_addr = 0x0A;
-#endif
+static spi_device_handle_t imu_spi_handle;
 
 typedef union {
   int16_t i16bit[3];
@@ -176,9 +125,9 @@ void lsm6dsr_fifo(void)
   dev_ctx.write_reg = platform_write;
   dev_ctx.read_reg = platform_read;
   dev_ctx.mdelay = platform_delay;
-  dev_ctx.handle = &SENSOR_BUS;
+  dev_ctx.handle = NULL;
   /* Init test platform */
-  platform_init(dev_ctx.handle);
+  platform_init(NULL);
 
   /* Wait sensor boot time */
   platform_delay(BOOT_TIME);
@@ -291,30 +240,25 @@ void lsm6dsr_fifo(void)
  * @param  reg       register to write
  * @param  bufp      pointer to data to write in register reg
  * @param  len       number of consecutive register to write
- *
  */
 static int32_t platform_write(void *handle, uint8_t reg, const uint8_t *bufp,
                               uint16_t len)
 {
-#if defined(NUCLEO_F401RE)
-  HAL_I2C_Mem_Write(handle, LSM6DSR_I2C_ADD_L, reg,
-                    I2C_MEMADD_SIZE_8BIT, (uint8_t*) bufp, len, 1000);
-#elif defined(STEVAL_MKI109D)
-  HAL_GPIO_WritePin(SPI1_NSS_GPIO_Port, SPI1_NSS_Pin, GPIO_PIN_RESET);
-  HAL_SPI_Transmit(handle, &reg, 1, HAL_MAX_DELAY);
-  HAL_SPI_Transmit(handle, (uint8_t*) bufp, len, HAL_MAX_DELAY);
-  HAL_GPIO_WritePin(SPI1_NSS_GPIO_Port, SPI1_NSS_Pin, GPIO_PIN_SET);
-#elif defined(STEVAL_MKI109V3)
-  HAL_GPIO_WritePin(CS_up_GPIO_Port, CS_up_Pin, GPIO_PIN_RESET);
-  HAL_SPI_Transmit(handle, &reg, 1, 1000);
-  HAL_SPI_Transmit(handle, (uint8_t*) bufp, len, 1000);
-  HAL_GPIO_WritePin(CS_up_GPIO_Port, CS_up_Pin, GPIO_PIN_SET);
-#elif defined(SPC584B_DIS)
-  i2c_lld_write(handle,  LSM6DSR_I2C_ADD_L & 0xFE, reg, (uint8_t*) bufp, len);
-#elif defined(NUCLEO_H503RB)
-  i3c_write(handle, i3c_dyn_addr, reg, (uint8_t*) bufp, len);
-#endif
-  return 0;
+  /* Allocate tx buffer: 1 byte reg + len bytes data */
+  uint8_t *tx_buf = malloc(1 + len);
+  if (tx_buf == NULL) return -1;
+
+  tx_buf[0] = reg;
+  memcpy(tx_buf + 1, bufp, len);
+
+  spi_transaction_t t = {
+    .length = 8 * (1 + len),
+    .tx_buffer = tx_buf,
+    .rx_buffer = NULL,
+  };
+  esp_err_t ret = spi_device_transmit(imu_spi_handle, &t);
+  free(tx_buf);
+  return (ret == ESP_OK) ? 0 : -1;
 }
 
 /*
@@ -325,32 +269,32 @@ static int32_t platform_write(void *handle, uint8_t reg, const uint8_t *bufp,
  * @param  reg       register to read
  * @param  bufp      pointer to buffer that store the data read
  * @param  len       number of consecutive register to read
- *
  */
 static int32_t platform_read(void *handle, uint8_t reg, uint8_t *bufp,
                              uint16_t len)
 {
-#if defined(NUCLEO_F401RE)
-  HAL_I2C_Mem_Read(handle, LSM6DSR_I2C_ADD_L, reg,
-                   I2C_MEMADD_SIZE_8BIT, bufp, len, 1000);
-#elif defined(STEVAL_MKI109D)
-  reg |= 0x80;
-  HAL_GPIO_WritePin(SPI1_NSS_GPIO_Port, SPI1_NSS_Pin, GPIO_PIN_RESET);
-  HAL_SPI_Transmit(handle, &reg, 1, HAL_MAX_DELAY);
-  HAL_SPI_Receive(handle, bufp, len, HAL_MAX_DELAY);
-  HAL_GPIO_WritePin(SPI1_NSS_GPIO_Port, SPI1_NSS_Pin, GPIO_PIN_SET);
-#elif defined(STEVAL_MKI109V3)
-  reg |= 0x80;
-  HAL_GPIO_WritePin(CS_up_GPIO_Port, CS_up_Pin, GPIO_PIN_RESET);
-  HAL_SPI_Transmit(handle, &reg, 1, 1000);
-  HAL_SPI_Receive(handle, bufp, len, 1000);
-  HAL_GPIO_WritePin(CS_up_GPIO_Port, CS_up_Pin, GPIO_PIN_SET);
-#elif defined(SPC584B_DIS)
-  i2c_lld_read(handle, LSM6DSR_I2C_ADD_L & 0xFE, reg, bufp, len);
-#elif defined(NUCLEO_H503RB)
-  i3c_read(handle, i3c_dyn_addr, reg, bufp, len);
-#endif
-  return 0;
+  /* SPI read: set MSB of register address */
+  uint8_t *tx_buf = calloc(1, 1 + len);
+  uint8_t *rx_buf = malloc(1 + len);
+  if (tx_buf == NULL || rx_buf == NULL) {
+    free(tx_buf); free(rx_buf);
+    return -1;
+  }
+
+  tx_buf[0] = reg | 0x80;  /* SPI read bit */
+
+  spi_transaction_t t = {
+    .length = 8 * (1 + len),
+    .tx_buffer = tx_buf,
+    .rx_buffer = rx_buf,
+  };
+  esp_err_t ret = spi_device_transmit(imu_spi_handle, &t);
+  if (ret == ESP_OK) {
+    memcpy(bufp, rx_buf + 1, len);  /* skip dummy byte */
+  }
+  free(tx_buf);
+  free(rx_buf);
+  return (ret == ESP_OK) ? 0 : -1;
 }
 
 /*
@@ -358,38 +302,21 @@ static int32_t platform_read(void *handle, uint8_t reg, uint8_t *bufp,
  *
  * @param  tx_buffer     buffer to transmit
  * @param  len           number of byte to send
- *
  */
 static void tx_com(uint8_t *tx_buffer, uint16_t len)
 {
-#if defined(NUCLEO_F401RE)
-  HAL_UART_Transmit(&huart2, tx_buffer, len, 1000);
-#elif defined(STEVAL_MKI109D)
-  CDC_Transmit_FS(tx_buffer, len);
-#elif defined(STEVAL_MKI109V3)
-  CDC_Transmit_FS(tx_buffer, len);
-#elif defined(SPC584B_DIS)
-  sd_lld_write(&SD2, tx_buffer, len);
-#elif defined(NUCLEO_H503RB)
-  HAL_UART_Transmit(&huart3, tx_buffer, len, 1000);
-#endif
+  /* Output via ESP-IDF UART0 (same as ESP_LOG) */
+  uart_write_bytes(UART_NUM_0, (const char *)tx_buffer, len);
 }
 
 /*
  * @brief  platform specific delay (platform dependent)
  *
  * @param  ms        delay in ms
- *
  */
 static void platform_delay(uint32_t ms)
 {
-#if defined(NUCLEO_F401RE) || defined(STEVAL_MKI109V3) || defined(NUCLEO_H503RB)
-  HAL_Delay(ms);
-#elif defined(STEVAL_MKI109D)
-  delay(ms);
-#elif defined(SPC584B_DIS)
-  osalThreadDelayMilliseconds(ms);
-#endif
+  vTaskDelay(pdMS_TO_TICKS(ms));
 }
 
 /*
@@ -397,30 +324,22 @@ static void platform_delay(uint32_t ms)
  */
 static void platform_init(void *handle)
 {
-#if defined(STEVAL_MKI109D)
-  struct spi_conf spi_conf;
+  /* Initialize SPI bus */
+  spi_bus_config_t buscfg = {
+    .mosi_io_num = IMU_SPI_MOSI_PIN,
+    .miso_io_num = IMU_SPI_MISO_PIN,
+    .sclk_io_num = IMU_SPI_SCK_PIN,
+    .quadwp_io_num = -1,
+    .quadhd_io_num = -1,
+    .max_transfer_sz = 4096,
+  };
+  ESP_ERROR_CHECK(spi_bus_initialize(IMU_SPI_HOST, &buscfg, SPI_DMA_CH_AUTO));
 
-  /* init SPI bus communication */
-  spi_conf.wire = WIRE_4;
-  spi_init(&spi_conf);
-
-  /* set VDD/VDDIO on DIL24 */
-  set_vdd(LSM6DSV16X_VDD);
-  set_vddio(LSM6DSV16X_VDDIO);
-  delay(100);
-
-#elif defined(STEVAL_MKI109V3)
-  TIM3->CCR1 = PWM_3V3;
-  TIM3->CCR2 = PWM_3V3;
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
-  HAL_Delay(1000);
-
-#elif defined(NUCLEO_H503RB)
-  i3c_set_bus_frequency(handle, 1000000);
-  i3c_rstdaa(handle);
-  i3c_setdasa(handle, LSM6DSV320X_I2C_ADD_L, &i3c_dyn_addr, 1);
-  i3c_set_bus_frequency(handle, 12500000);
-
-#endif
+  spi_device_interface_config_t devcfg = {
+    .clock_speed_hz = IMU_SPI_FREQ_HZ,
+    .mode = 0,                       /* SPI mode 0 (CPOL=0, CPHA=0) */
+    .spics_io_num = IMU_SPI_CS_PIN,
+    .queue_size = 3,
+  };
+  ESP_ERROR_CHECK(spi_bus_add_device(IMU_SPI_HOST, &devcfg, &imu_spi_handle));
 }
