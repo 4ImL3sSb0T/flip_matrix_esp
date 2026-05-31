@@ -3,7 +3,6 @@
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
 import matplotlib.font_manager as fm
 from pathlib import Path
 
@@ -26,16 +25,15 @@ if _CN_FONT is None:
     _CN_FONT = fm.FontProperties(family="sans-serif")
 
 
-CNN_SAMPLE_FRAMES = 64
+CNN_SAMPLE_FRAMES = 16
 
 
 class CNNSampleViewer:
-    """CNN 样本可视化器 — 64帧滑动窗口，显示 3 通道频谱"""
+    """CNN 样本可视化器 — 64帧滑动窗口，3 通道分开显示"""
 
     def __init__(self, sample_len: int = CNN_SAMPLE_FRAMES):
         self.sample_len = sample_len
         self.fig = None
-        self.axes = None
         self.specs = {}       # key -> ndarray (n_frames, FREQ_BINS)
         self.n_frames = 0
         self.current_start = 0
@@ -50,41 +48,32 @@ class CNNSampleViewer:
     def setup(self):
         # 布局:
         # 行 0: 全局频谱概览 (X/Y/Z 并排)，高亮当前窗口
-        # 行 1: CNN 样本 3 通道热力图 (64×512)
-        # 行 2: CNN 样本合成 RGB 图 (R=X G=Y B=Z)
-        self.fig = plt.figure(figsize=(16, 10))
+        # 行 1-3: CNN 样本 3 通道热力图 (64×512)，各占一行，带 colorbar
+        self.fig = plt.figure(figsize=(16, 12))
         gs = self.fig.add_gridspec(
-            3, 4, height_ratios=[1.5, 2, 2],
-            hspace=0.4, left=0.06, right=0.97, top=0.92, wspace=0.35,
+            4, 4, height_ratios=[1, 2, 2, 2],
+            hspace=0.45, left=0.06, right=0.93, top=0.93, wspace=0.4,
         )
 
         # 行 0: 概览
         self.ax_overview = [self.fig.add_subplot(gs[0, i]) for i in range(3)]
 
-        # 行 1: 3 通道
-        self.ax_ch = [self.fig.add_subplot(gs[1, i]) for i in range(3)]
-
-        # 行 2: 合成图 + 当前样本信息
-        self.ax_rgb = self.fig.add_subplot(gs[2, 0:2])
-        self.ax_info = self.fig.add_subplot(gs[2, 2:4])
-        self.ax_info.axis("off")
+        # 行 1-3: 3 通道 (各带 colorbar)
+        self.ax_ch = []
+        self.ax_cb = []
+        for row, (key, label) in enumerate(zip(["x", "y", "z"], ["X", "Y", "Z"])):
+            ax = self.fig.add_subplot(gs[row + 1, 0:3])
+            ax_cb = self.fig.add_subplot(gs[row + 1, 3])
+            self.ax_ch.append(ax)
+            self.ax_cb.append(ax_cb)
+            ax.set_title(f"Ch{row}: {label} axis", fontproperties=_CN_FONT, fontsize=11)
 
         self.fig.suptitle(
             f"CNN Input Sample  |  shape=({3}, {self.sample_len}, {SP_FREQ_BINS})  "
             f"FFT={SP_FFT_SIZE}  HOP={SP_HOP_SIZE}  fs={SP_SAMPLE_RATE}Hz  "
-            f"frames={self.n_frames}",
+            f"frames={self.n_frames}  dB",
             fontsize=11, fontproperties=_CN_FONT,
         )
-
-        # 概览标题
-        for ax, label in zip(self.ax_overview, ["X", "Y", "Z"]):
-            ax.set_title(f"{label}", fontproperties=_CN_FONT, fontsize=10)
-
-        # 通道标题
-        for ax, label in zip(self.ax_ch, ["Ch0: X", "Ch1: Y", "Ch2: Z"]):
-            ax.set_title(label, fontproperties=_CN_FONT, fontsize=10)
-
-        self.ax_rgb.set_title("RGB Composite (R=X G=Y B=Z)", fontproperties=_CN_FONT, fontsize=10)
 
         # 滑块
         from matplotlib.widgets import Slider
@@ -132,66 +121,19 @@ class CNNSampleViewer:
                 fontproperties=_CN_FONT, fontsize=10,
             )
 
-            # ── 行 1: 3 通道热力图 (64×512) ──
-            sample = {}
-            for ax, key in zip(self.ax_ch, ["x", "y", "z"]):
+            # ── 行 1-3: 3 通道热力图 (64×512)，各带 colorbar ──
+            for ax, cb_ax, key in zip(self.ax_ch, self.ax_cb, ["x", "y", "z"]):
                 ax.clear()
+                cb_ax.clear()
                 ch_data = self.specs[key][start:end]  # (64, 512)
-                sample[key] = ch_data
-                # 数据已经是 log10 幅度，直接显示
                 im = ax.imshow(
                     ch_data.T, aspect="auto", cmap="inferno",
                     origin="lower", interpolation="nearest",
                     extent=[0, self.sample_len, 0, SP_SAMPLE_RATE / 2],
                 )
-                ax.set_ylabel("Hz", fontproperties=_CN_FONT, fontsize=8)
-                ax.set_xlabel("Frame", fontproperties=_CN_FONT, fontsize=8)
-
-            # ── 行 2 左: 合成 RGB ──
-            self.ax_rgb.clear()
-            # 数据已是 log10 幅度，percentile clip 归一化到 0-1
-            def norm(arr):
-                t = arr.T  # (512, 64) 频率×帧
-                lo, hi = np.percentile(t, [2, 98])
-                return np.clip((t - lo) / (hi - lo + 1e-10), 0, 1)
-
-            rgb = np.stack([
-                norm(sample["x"]),
-                norm(sample["y"]),
-                norm(sample["z"]),
-            ], axis=-1)  # (512, 64, 3)  纵轴=频率, 横轴=帧
-            self.ax_rgb.imshow(
-                rgb, aspect="auto", origin="lower",
-                extent=[0, self.sample_len, 0, SP_SAMPLE_RATE / 2],
-            )
-            self.ax_rgb.set_title("RGB Composite", fontproperties=_CN_FONT, fontsize=10)
-            self.ax_rgb.set_ylabel("Hz", fontproperties=_CN_FONT, fontsize=8)
-            self.ax_rgb.set_xlabel("Frame", fontproperties=_CN_FONT, fontsize=8)
-
-            # ── 行 2 右: 样本信息 ──
-            self.ax_info.clear()
-            self.ax_info.axis("off")
-            info_lines = [
-                f"Sample Shape: ({3}, {self.sample_len}, {SP_FREQ_BINS})",
-                f"Data Type: float32",
-                f"Time Span: {self.sample_len * SP_HOP_SIZE / SP_SAMPLE_RATE:.3f}s",
-                f"Freq Range: 0 ~ {SP_SAMPLE_RATE/2:.0f} Hz",
-                f"Freq Res: {SP_FREQ_RES:.2f} Hz/bin",
-                f"Start Frame: {start}  ({start * SP_HOP_SIZE / SP_SAMPLE_RATE:.3f}s)",
-                f"End Frame: {end}  ({end * SP_HOP_SIZE / SP_SAMPLE_RATE:.3f}s)",
-                "",
-                "Channel Mapping:",
-                "  Ch0 = X axis acceleration",
-                "  Ch1 = Y axis acceleration",
-                "  Ch2 = Z axis acceleration",
-            ]
-            self.ax_info.text(
-                0.05, 0.95, "\n".join(info_lines),
-                transform=self.ax_info.transAxes,
-                fontsize=9, verticalalignment="top",
-                fontfamily="monospace",
-                bbox=dict(boxstyle="round,pad=0.5", facecolor="#f0f0f0", alpha=0.8),
-            )
+                ax.set_ylabel("Hz", fontproperties=_CN_FONT, fontsize=9)
+                ax.set_xlabel("Frame", fontproperties=_CN_FONT, fontsize=9)
+                plt.colorbar(im, cax=cb_ax, label="dB")
 
             self.slider.set_val(start)
             self.fig.canvas.draw_idle()
@@ -263,7 +205,7 @@ def plot_fft_analysis(
         axes[1, col].set_xlabel("时间 (s)", fontproperties=_CN_FONT)
         axes[1, col].set_ylabel("频率 (Hz)", fontproperties=_CN_FONT)
         axes[1, col].set_ylim(0, sr / 2)
-        plt.colorbar(im, ax=axes[1, col], label="幅度 (dB)")
+        plt.colorbar(im, ax=axes[1, col], label="dB")
 
         # 行 2: 最后一帧频谱 (全频段)
         last_spec = spec[-1]
