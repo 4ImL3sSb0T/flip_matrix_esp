@@ -144,8 +144,6 @@ void sp_process_task(void *arg)
 
     static vec3f batch[256];
 
-
-
     while (1) {
         size_t bytes = xMessageBufferReceive(acc_buf, batch, sizeof(batch), portMAX_DELAY);
         size_t count = bytes / sizeof(vec3f);
