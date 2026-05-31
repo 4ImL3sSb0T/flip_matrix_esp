@@ -93,6 +93,14 @@ SHELL_EXPORT_CMD(
 - `espressif/led_strip` — LED 灯带组件
 - `espressif/button` — 按键组件
 
+## 联网工具限制
+
+内置的 `WebSearch` 和 `WebFetch` 工具在此环境下不可用。所有联网搜索必须使用 MCP 工具：
+- GitHub 搜索/操作：`mcp__dashscope-github__*`（search_code, search_repositories, get_file_contents 等）
+- 网页搜索：`mcp__tavily__tavily_search`
+- 网页内容提取：`mcp__tavily__tavily_extract`
+- 库文档查询：`mcp__plugin_context7_context7__*`
+
 ## IDE Setup
 
 - clangd 路径：`C:\Espressif\tools\esp-clang\esp-19.1.2_20250312\esp-clang\bin\clangd.exe`
