@@ -13,15 +13,24 @@ ESP32 IMU 数据 TCP 接收器
   python tcp_receiver.py --ip 192.168.1.100 --port 9090  # 自定义 IP 和端口
   python tcp_receiver.py --output data.csv        # 指定输出文件名
   python tcp_receiver.py --duration 10            # 录制 10 秒后自动停止
+
+标签功能 (Windows):
+  按 1/2/3/4 标记时间段 (开始/结束切换):
+    1 = idle
+    2 = normal
+    3 = loose
+    4 = imbalance
 """
 
 import socket
 import struct
 import argparse
 import csv
+import json
 import time
 import signal
 import sys
+import threading
 from pathlib import Path
 from datetime import datetime
 from collections import deque
@@ -34,9 +43,95 @@ DEFAULT_IP = "192.168.4.1"
 DEFAULT_PORT = 8080
 RECV_BUFFER_SIZE = 4096  # 接收缓冲区大小
 
+# 类别名称 (与训练代码一致)
+CLASS_NAMES = ["idle", "normal", "loose", "imbalance"]
+
+# ── 标签管理器 ────────────────────────────────────────────────────────────────
+
+class LabelManager:
+    """时间段标签管理器 — 支持按键切换开始/结束标记"""
+
+    def __init__(self):
+        self.labels = []           # 已完成的标签列表
+        self.active = {}           # 正在标记的类别 {class_name: start_time}
+        self.start_time = None     # 录制开始时间
+        self.lock = threading.Lock()
+
+    def set_start_time(self, t: float):
+        """设置录制开始时间"""
+        self.start_time = t
+
+    def toggle(self, class_name: str, current_time: float):
+        """切换标记状态：如果未标记则开始，如果已标记则结束"""
+        with self.lock:
+            if class_name in self.active:
+                # 结束标记
+                start = self.active.pop(class_name)
+                # 时间是相对于录制开始的秒数
+                rel_start = start - self.start_time
+                rel_end = current_time - self.start_time
+                self.labels.append({
+                    "start": round(rel_start, 3),
+                    "end": round(rel_end, 3),
+                    "class": class_name,
+                })
+                print(f"\n  ✓ {class_name}: {rel_start:.2f}s ~ {rel_end:.2f}s")
+            else:
+                # 开始标记
+                self.active[class_name] = current_time
+                rel_time = current_time - self.start_time
+                print(f"\n  ● {class_name}: 开始于 {rel_time:.2f}s (再按一次结束)")
+
+    def get_status(self) -> str:
+        """获取当前标记状态"""
+        with self.lock:
+            if not self.active:
+                return ""
+            parts = []
+            for cls, t in self.active.items():
+                rel = t - self.start_time
+                parts.append(f"{cls}({rel:.1f}s~)")
+            return " | ".join(parts)
+
+    def save_json(self, json_path: Path):
+        """保存标签到 JSON 文件"""
+        with self.lock:
+            # 结束所有未完成的标记
+            if self.start_time and self.active:
+                current = time.time()
+                for cls, start in self.active.items():
+                    rel_start = start - self.start_time
+                    rel_end = current - self.start_time
+                    self.labels.append({
+                        "start": round(rel_start, 3),
+                        "end": round(rel_end, 3),
+                        "class": cls,
+                    })
+                self.active.clear()
+
+            # 按开始时间排序
+            self.labels.sort(key=lambda x: x["start"])
+
+            # 构建 JSON
+            data = {
+                "default_class": "other",
+                "labels": self.labels,
+            }
+
+            json_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(json_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+
+            print(f"\n标签已保存: {json_path}")
+            print(f"  共 {len(self.labels)} 个时间段")
+            for label in self.labels:
+                print(f"    [{label['start']:.2f}s ~ {label['end']:.2f}s] {label['class']}")
+
+
 # ── 全局状态 ──────────────────────────────────────────────────────────────────
 
 running = True
+label_manager = LabelManager()
 
 
 def signal_handler(sig, frame):
@@ -44,6 +139,37 @@ def signal_handler(sig, frame):
     global running
     running = False
     print("\n正在停止...")
+
+
+def keyboard_listener():
+    """键盘监听线程 — Windows 使用 msvcrt"""
+    global running
+
+    try:
+        import msvcrt
+    except ImportError:
+        print("警告: 键盘监听仅支持 Windows (msvcrt)")
+        return
+
+    # 按键映射
+    key_map = {
+        b'1': 'idle',
+        b'2': 'normal',
+        b'3': 'loose',
+        b'4': 'imbalance',
+    }
+
+    while running:
+        if msvcrt.kbhit():
+            key = msvcrt.getch()
+            if key in key_map:
+                class_name = key_map[key]
+                current_time = time.time()
+                label_manager.toggle(class_name, current_time)
+            elif key == b'\x03':  # Ctrl+C
+                running = False
+                break
+        time.sleep(0.05)  # 50ms 轮询
 
 
 def get_timestamp_us() -> int:
@@ -134,10 +260,18 @@ def run_receiver(ip: str, port: int, output_path: Path, duration: float = None):
     # 采样率估算
     sample_timestamps = deque(maxlen=1000)
 
+    # 初始化标签管理器
+    label_manager.set_start_time(start_time)
+
+    # 启动键盘监听线程
+    kb_thread = threading.Thread(target=keyboard_listener, daemon=True)
+    kb_thread.start()
+
     print(f"开始录制到: {output_path}")
     if duration:
         print(f"录制时长: {duration} 秒")
-    print("按 Ctrl+C 停止录制\n")
+    print("按 Ctrl+C 停止录制")
+    print("\n标签快捷键: 1=idle 2=normal 3=loose 4=imbalance (开始/结束切换)\n")
 
     try:
         while running:
@@ -187,10 +321,15 @@ def run_receiver(ip: str, port: int, output_path: Path, duration: float = None):
                 else:
                     rate = total_samples / elapsed
 
+                # 标签状态
+                label_status = label_manager.get_status()
+                label_str = f" | 标记: {label_status}" if label_status else ""
+
                 print(f"\r采样点: {total_samples:>8d} | "
                       f"帧数: {total_frames:>6d} | "
                       f"采样率: {rate:>8.1f} Hz | "
-                      f"已录制: {elapsed:>6.1f}s", end='', flush=True)
+                      f"已录制: {elapsed:>6.1f}s{label_str}",
+                      end='', flush=True)
 
     except KeyboardInterrupt:
         pass
@@ -214,9 +353,13 @@ def run_receiver(ip: str, port: int, output_path: Path, duration: float = None):
         csv_file.close()
         sock.close()
 
+        # 保存标签 JSON
+        json_path = output_path.with_suffix('.json')
+        label_manager.save_json(json_path)
+
         # 显示最终统计
         elapsed = time.time() - start_time
-        print(f"\n\n{'='*60}")
+        print(f"\n{'='*60}")
         print(f"录制完成")
         print(f"  文件: {output_path}")
         print(f"  采样点: {total_samples}")
