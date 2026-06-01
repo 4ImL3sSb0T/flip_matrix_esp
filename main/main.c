@@ -155,7 +155,7 @@ void app_main(void)
 
     // 流体仿真（从 ring buffer 读取 IMU 数据）
     // xTaskCreatePinnedToCore(start_flip_task, "flip_task", 4096, NULL, 5, NULL, 1);
-    xTaskCreatePinnedToCore(cpu_monitor_task, "cpu_mon", 4096, NULL, 3, NULL, 0);
+    // xTaskCreatePinnedToCore(cpu_monitor_task, "cpu_mon", 4096, NULL, 3, NULL, 0);
 
     xTaskCreatePinnedToCore(sp_process_task, "sp_process_task", 4096, NULL, 4, NULL, 1);
 
@@ -173,8 +173,10 @@ void app_main(void)
     }
 
     while (1) {
-        motor_set_duty(LEDC_CHANNEL_0, 0.2f * sin(0.0005f * xTaskGetTickCount()));  // 让CNN神经网络更好地学习, T = 12.3s
+        float duty = -fabs(0.2f * sin(0.0001f * xTaskGetTickCount()) + 0.1f);
+        motor_set_duty(LEDC_CHANNEL_0, duty);  // 让CNN神经网络更好地学习, T = 12.3s
         vTaskDelay(pdTICKS_TO_MS(10));
+        ESP_LOGI("MAIN", "Set motor duty: %.2f%%", duty * 100);
     }
 }
 
