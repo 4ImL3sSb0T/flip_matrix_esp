@@ -173,7 +173,7 @@ void app_main(void)
     }
 
     while (1) {
-        float duty = -fabs(0.2f * sin(0.0001f * xTaskGetTickCount()) + 0.1f);
+        float duty = -(0.2f * fabs(sin(0.0001f * xTaskGetTickCount())) + 0.1f);
         motor_set_duty(LEDC_CHANNEL_0, duty);  // 让CNN神经网络更好地学习, T = 12.3s
         vTaskDelay(pdTICKS_TO_MS(10));
         ESP_LOGI("MAIN", "Set motor duty: %.2f%%", duty * 100);
