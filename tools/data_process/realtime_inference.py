@@ -50,7 +50,7 @@ except ImportError:
 # TCP 协议
 VEC3F_SIZE = 12          # 3 × float32 = 12 字节
 FOOTER_MAGIC = 0xFFFFFFFF  # 帧尾标记
-DEFAULT_IP = "192.168.4.1"
+DEFAULT_IP = "192.168.137.200"
 DEFAULT_PORT = 8080
 RECV_BUFFER_SIZE = 4096  # 接收缓冲区大小
 
@@ -170,13 +170,14 @@ def parse_buffer(buffer: bytes) -> tuple:
 class RealtimeInference:
     """实时推理器 — 接收数据、FFT 处理、模型推理"""
 
-    def __init__(self, model_path: str, norm_stats: dict):
+    def __init__(self, model_path: str, norm_stats: dict, calibrate_seconds: float = 5.0):
         """
         初始化推理器
 
         Args:
             model_path: ONNX 模型路径
             norm_stats: 归一化参数 {"mean": [x, y, z], "std": [x, y, z]}
+            calibrate_seconds: 校准时长（秒），采集静态数据计算直流偏移
         """
         # 加载 ONNX 模型
         print(f"加载模型: {model_path}")
@@ -214,6 +215,16 @@ class RealtimeInference:
         self.total_inferences = 0
         self.inference_times = []
 
+        # 校准相关
+        self.calibrate_seconds = calibrate_seconds
+        self.calibrating = True
+        self.calibrate_samples_x = []
+        self.calibrate_samples_y = []
+        self.calibrate_samples_z = []
+        self.dc_offset_x = 0.0
+        self.dc_offset_y = 0.0
+        self.dc_offset_z = 0.0
+
         # 锁 (线程安全)
         self.lock = Lock()
 
@@ -226,9 +237,23 @@ class RealtimeInference:
         """
         with self.lock:
             for x, y, z in samples:
-                self.buffer_x.append(x)
-                self.buffer_y.append(y)
-                self.buffer_z.append(z)
+                # 校准模式：收集静态数据
+                if self.calibrating:
+                    self.calibrate_samples_x.append(x)
+                    self.calibrate_samples_y.append(y)
+                    self.calibrate_samples_z.append(z)
+                    self.total_samples += 1
+
+                    # 检查是否收集够校准数据
+                    target_samples = int(self.calibrate_seconds * SP_SAMPLE_RATE)
+                    if len(self.calibrate_samples_x) >= target_samples:
+                        self._finish_calibration()
+                    continue
+
+                # 正常模式：减去直流偏移后送入缓冲区
+                self.buffer_x.append(x - self.dc_offset_x)
+                self.buffer_y.append(y - self.dc_offset_y)
+                self.buffer_z.append(z - self.dc_offset_z)
                 self.sample_count += 1
                 self.total_samples += 1
 
@@ -236,6 +261,32 @@ class RealtimeInference:
                 if self.sample_count >= SP_HOP_SIZE:
                     self.sample_count = 0
                     self._do_fft()
+
+    def _finish_calibration(self):
+        """完成校准，计算直流偏移"""
+        self.dc_offset_x = np.mean(self.calibrate_samples_x)
+        self.dc_offset_y = np.mean(self.calibrate_samples_y)
+        self.dc_offset_z = np.mean(self.calibrate_samples_z)
+        self.calibrating = False
+
+        # 释放校准数据
+        n = len(self.calibrate_samples_x)
+        self.calibrate_samples_x.clear()
+        self.calibrate_samples_y.clear()
+        self.calibrate_samples_z.clear()
+
+        print(f"\n校准完成 ({n} 个样本)")
+        print(f"  直流偏移: X={self.dc_offset_x:.6f}, Y={self.dc_offset_y:.6f}, Z={self.dc_offset_z:.6f}")
+        print(f"开始推理...\n")
+
+    def get_calibrate_progress(self) -> tuple:
+        """获取校准进度"""
+        if not self.calibrating:
+            return 1.0, 0
+        target = int(self.calibrate_seconds * SP_SAMPLE_RATE)
+        progress = len(self.calibrate_samples_x) / target if target > 0 else 0
+        remaining = len(self.calibrate_samples_x)
+        return min(progress, 1.0), remaining
 
     def _do_fft(self):
         """执行 FFT 处理，需要至少 FFT_SIZE 个样本"""
@@ -386,20 +437,28 @@ def tcp_receiver_thread(sock: socket.socket, inference: RealtimeInference):
             rate = 0
 
         # 实时显示
-        status = inference.get_status()
-        pred = status["last_prediction"] or "---"
-        conf = ""
-        if status["last_probs"]:
-            probs = status["last_probs"]
-            conf = f" [{probs[0]:.2f} {probs[1]:.2f} {probs[2]:.2f} {probs[3]:.2f}]"
+        if inference.calibrating:
+            progress, count = inference.get_calibrate_progress()
+            bar_len = 30
+            filled = int(bar_len * progress)
+            bar = '█' * filled + '░' * (bar_len - filled)
+            print(f"\r校准中: [{bar}] {progress*100:.0f}% ({count} 样本)",
+                  end='', flush=True)
+        else:
+            status = inference.get_status()
+            pred = status["last_prediction"] or "---"
+            conf = ""
+            if status["last_probs"]:
+                probs = status["last_probs"]
+                conf = f" [{probs[0]:.2f} {probs[1]:.2f} {probs[2]:.2f} {probs[3]:.2f}]"
 
-        print(f"\r采样: {status['total_samples']:>8d} | "
-              f"FFT帧: {status['fft_frames']:>4d} | "
-              f"推理: {status['total_inferences']:>4d} | "
-              f"采样率: {rate:>7.1f} Hz | "
-              f"推理耗时: {status['avg_inference_ms']:>5.1f}ms | "
-              f"预测: {pred:>10s}{conf}",
-              end='', flush=True)
+            print(f"\r采样: {status['total_samples']:>8d} | "
+                  f"FFT帧: {status['fft_frames']:>4d} | "
+                  f"推理: {status['total_inferences']:>4d} | "
+                  f"采样率: {rate:>7.1f} Hz | "
+                  f"推理耗时: {status['avg_inference_ms']:>5.1f}ms | "
+                  f"预测: {pred:>10s}{conf}",
+                  end='', flush=True)
 
     sock.close()
 
@@ -435,6 +494,8 @@ def main():
   python realtime_inference.py                           # 默认连接 192.168.4.1:8080
   python realtime_inference.py --ip 192.168.1.100        # 自定义 IP
   python realtime_inference.py --model models/model.onnx # 指定模型
+  python realtime_inference.py --calibrate 3             # 校准 3 秒
+  python realtime_inference.py --calibrate 0             # 跳过校准
         """)
 
     parser.add_argument('--ip', default=DEFAULT_IP,
@@ -443,6 +504,8 @@ def main():
                         help=f'TCP 端口 (默认: {DEFAULT_PORT})')
     parser.add_argument('--model', '-m', default=None,
                         help='ONNX 模型路径 (默认: models/model.onnx)')
+    parser.add_argument('--calibrate', '-c', type=float, default=5.0,
+                        help='校准时长（秒），采集静态数据计算直流偏移 (默认: 5.0)')
 
     args = parser.parse_args()
 
@@ -463,7 +526,7 @@ def main():
     print(f"归一化参数: mean={meta['norm_stats']['mean']}, std={meta['norm_stats']['std']}")
 
     # 初始化推理器
-    inference = RealtimeInference(str(model_path), meta["norm_stats"])
+    inference = RealtimeInference(str(model_path), meta["norm_stats"], args.calibrate)
 
     # 注册信号处理
     signal.signal(signal.SIGINT, signal_handler)
