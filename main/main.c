@@ -173,7 +173,7 @@ void app_main(void)
     }
 
     while (1) {
-        motor_set_duty(LEDC_CHANNEL_0, -0.2f);  // 50% 占空比
+        motor_set_duty(LEDC_CHANNEL_0, 0.2f * sin(0.0005f * xTaskGetTickCount()));  // 让CNN神经网络更好地学习, T = 12.3s
         vTaskDelay(pdTICKS_TO_MS(10));
     }
 }

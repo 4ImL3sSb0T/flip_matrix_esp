@@ -4,7 +4,7 @@
 #include "driver/ledc.h"
 #include "service/tools/common_def.h"
 
-#define MOTOR_PWM_FREQ_HZ      1000
+#define MOTOR_PWM_FREQ_HZ      20000
 #define MOTOR_PWM_RESOLUTION   LEDC_TIMER_10_BIT
 #define MOTOR_PWM_MAX_DUTY     1023
 #define MOTOR_LEDC_TIMER       LEDC_TIMER_0
