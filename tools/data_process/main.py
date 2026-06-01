@@ -10,7 +10,7 @@ IMU 加速度数据 FFT 频谱分析
 import sys
 from pathlib import Path
 
-from src.data_loader import load_xlsx, find_xlsx, remove_dc_offset
+from src.data_loader import load_xlsx, load_csv, find_data_file, remove_dc_offset
 from src.fft_processor import process_3axis
 from src.visualizer import plot_fft_analysis, CNNSampleViewer
 
@@ -19,14 +19,17 @@ def main():
     static_mode = "--static" in sys.argv
 
     data_dir = Path(__file__).parent / "data"
-    xlsx_path = find_xlsx(data_dir)
-    if not xlsx_path:
-        print("data/ 目录下没有找到 xlsx 文件")
+    data_path = find_data_file(data_dir)
+    if not data_path:
+        print("data/ 目录下没有找到 csv/xlsx 文件")
         return
 
-    # 1. 加载原始数据
-    print(f"读取: {xlsx_path.name}")
-    ax_raw, ay_raw, az_raw = load_xlsx(xlsx_path)
+    # 1. 加载原始数据 (根据扩展名选择加载器)
+    print(f"读取: {data_path.name}")
+    if data_path.suffix.lower() == '.csv':
+        ax_raw, ay_raw, az_raw = load_csv(data_path)
+    else:
+        ax_raw, ay_raw, az_raw = load_xlsx(data_path)
     print(f"总采样数: {len(ax_raw)}")
 
     # 2. 用前 10000 行静态数据去除直流偏移, 只保留交流分量
