@@ -201,14 +201,22 @@ def connect_to_server(ip: str, port: int) -> socket.socket:
         sys.exit(1)
 
 
+def is_valid_sample(x: float, y: float, z: float) -> bool:
+    """检查采样点是否有效 (非 NaN, 非 Inf)"""
+    import math
+    return not (math.isnan(x) or math.isnan(y) or math.isnan(z) or
+                math.isinf(x) or math.isinf(y) or math.isinf(z))
+
+
 def parse_buffer(buffer: bytes, samples: list, frame_count: int) -> tuple:
     """
     解析接收缓冲区，提取采样点和帧信息
 
-    返回: (剩余未处理的字节, 新增采样点列表, 帧计数增量)
+    返回: (剩余未处理的字节, 新增采样点列表, 帧计数增量, 无效采样数)
     """
     new_samples = []
     frames_detected = 0
+    invalid_count = 0
     offset = 0
 
     while offset < len(buffer):
@@ -228,14 +236,20 @@ def parse_buffer(buffer: bytes, samples: list, frame_count: int) -> tuple:
         if remaining >= VEC3F_SIZE:
             # 解析 vec3f (3 个 float32)
             x, y, z = struct.unpack_from('<fff', buffer, offset)
-            timestamp_us = get_timestamp_us()
-            new_samples.append((timestamp_us, x, y, z))
+
+            # 检查是否为有效数据 (过滤 NaN/Inf)
+            if is_valid_sample(x, y, z):
+                timestamp_us = get_timestamp_us()
+                new_samples.append((timestamp_us, x, y, z))
+            else:
+                invalid_count += 1
+
             offset += VEC3F_SIZE
         else:
             # 数据不足，等待更多数据
             break
 
-    return buffer[offset:], new_samples, frames_detected
+    return buffer[offset:], new_samples, frames_detected, invalid_count
 
 
 def run_receiver(ip: str, port: int, output_path: Path, duration: float = None):
@@ -254,6 +268,7 @@ def run_receiver(ip: str, port: int, output_path: Path, duration: float = None):
     # 统计
     total_samples = 0
     total_frames = 0
+    total_invalid = 0
     buffer = b''
     start_time = time.time()
 
@@ -295,7 +310,7 @@ def run_receiver(ip: str, port: int, output_path: Path, duration: float = None):
             buffer += data
 
             # 解析数据
-            buffer, new_samples, new_frames = parse_buffer(buffer, [], 0)
+            buffer, new_samples, new_frames, invalid_count = parse_buffer(buffer, [], 0)
 
             # 写入 CSV
             for sample in new_samples:
@@ -306,6 +321,7 @@ def run_receiver(ip: str, port: int, output_path: Path, duration: float = None):
 
             total_samples += len(new_samples)
             total_frames += new_frames
+            total_invalid += invalid_count
 
             # 实时显示统计
             elapsed = time.time() - start_time
@@ -324,11 +340,12 @@ def run_receiver(ip: str, port: int, output_path: Path, duration: float = None):
                 # 标签状态
                 label_status = label_manager.get_status()
                 label_str = f" | 标记: {label_status}" if label_status else ""
+                invalid_str = f" | 无效: {total_invalid}" if total_invalid > 0 else ""
 
                 print(f"\r采样点: {total_samples:>8d} | "
                       f"帧数: {total_frames:>6d} | "
                       f"采样率: {rate:>8.1f} Hz | "
-                      f"已录制: {elapsed:>6.1f}s{label_str}",
+                      f"已录制: {elapsed:>6.1f}s{invalid_str}{label_str}",
                       end='', flush=True)
 
     except KeyboardInterrupt:
@@ -364,6 +381,8 @@ def run_receiver(ip: str, port: int, output_path: Path, duration: float = None):
         print(f"  文件: {output_path}")
         print(f"  采样点: {total_samples}")
         print(f"  帧数: {total_frames}")
+        if total_invalid > 0:
+            print(f"  无效采样: {total_invalid} (已过滤 NaN/Inf)")
         print(f"  时长: {elapsed:.2f} 秒")
         if elapsed > 0:
             print(f"  平均采样率: {total_samples/elapsed:.1f} Hz")
