@@ -15,5 +15,12 @@
     "--compile-commands-dir=d:\\Project\\Esp32s3_LEDPan\\build"
   ],
   "idf.portWin": "COM16",
-  "idf.flashType": "UART"
+  "idf.flashType": "UART",
+  "python-envs.pythonProjects": [
+    {
+      "path": ".",
+      "envManager": "ms-python.python:venv",
+      "packageManager": "ms-python.python:pip"
+    }
+  ]
 }

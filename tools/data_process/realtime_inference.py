@@ -50,7 +50,7 @@ except ImportError:
 # TCP 协议
 VEC3F_SIZE = 12          # 3 × float32 = 12 字节
 FOOTER_MAGIC = 0xFFFFFFFF  # 帧尾标记
-DEFAULT_IP = "192.168.137.200"
+DEFAULT_IP = "192.168.137.157"
 DEFAULT_PORT = 8080
 RECV_BUFFER_SIZE = 4096  # 接收缓冲区大小
 
