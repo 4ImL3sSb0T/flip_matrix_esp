@@ -14,7 +14,7 @@
     "--query-driver=**",
     "--compile-commands-dir=d:\\Project\\Esp32s3_LEDPan\\build"
   ],
-  "idf.portWin": "COM16",
+  "idf.portWin": "COM11",
   "idf.flashType": "UART",
   "python-envs.pythonProjects": [
     {

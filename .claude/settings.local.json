@@ -64,7 +64,9 @@
       "Bash(Get-ChildItem -Path \"D:\\\\Project\\\\Esp32s3_LEDPan\\\\tools\\\\data_process\" -File)",
       "Bash(Select-Object Name, Length, Extension)",
       "Bash(dir \"D:\\\\Project\\\\Esp32s3_LEDPan\\\\tools\\\\data_process\\\\\" 2>/dev/null)",
-      "Bash(wsl *)"
+      "Bash(wsl *)",
+      "PowerShell(\\(Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned\\) ; \\(& d:\\\\Project\\\\Esp32s3_LEDPan\\\\tools\\\\data_process\\\\.venv\\\\Scripts\\\\Activate.ps1\\))",
+      "Bash(.venv/Scripts/python.exe -c ' *)"
     ]
   }
 }
