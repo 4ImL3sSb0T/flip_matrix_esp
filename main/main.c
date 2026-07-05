@@ -86,8 +86,8 @@ void app_main(void)
 {
     eventbus_init(16, 12, 4096);
 
-    uart_async_init();
-    uart_async_start();
+    // uart_async_init();
+    // uart_async_start();
 
     wifi_service_init();
     wifi_service_start();
