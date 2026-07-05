@@ -21,31 +21,27 @@
 #include <service/signal_process/imu_data_process.h>
 
 #include "bsp/motor/motor.h"
+#include "service/cheat.h"
 #include <math.h>
 
-// ── TCP server 回调（留空，由用户填充业务逻辑）──────────────────────────────
+// ── TCP server 回调 — A/B/C/D 设置 cheat GPIO 输出 ─────────────────────────────
 static void tcp_on_data(int client_sock, const char *data, int len)
 {
+    static uint8_t string_buffer[64];
     if (len > 0) {
         switch (data[0])
         {
-        case 'A':
-            tcp_server_broadcast("Hello from ESP32!", 18);
-            break;
-        case 'B':
-            /* code */
-            break;
-        case 'C':
-            /* code */
-            break;
-        case 'D':
-            /* code */
-            break;
-        default:
-            break;
+        case 'A': cheat_set_state(0); break;   // IDLE       → GPIO: 00
+        case 'B': cheat_set_state(1); break;   // NORMAL     → GPIO: 01
+        case 'C': cheat_set_state(2); break;   // LOOSE      → GPIO: 10
+        case 'D': cheat_set_state(3); break;   // IMBALANCE  → GPIO: 11
+        default:  break;
         }
+        snprintf((char *)string_buffer, sizeof(string_buffer),
+                 "OK:%c\n", data[0]);
+        tcp_server_send(client_sock, string_buffer, (int)strlen((char *)string_buffer));
     }
-    ESP_LOGI("TCP", "[sock=%d] Received %d bytes: %.*s", client_sock, len, len, data);
+    ESP_LOGI("TCP", "[sock=%d] %d bytes: %.*s", client_sock, len, len, data);
 }
 
 static void tcp_on_connect(int client_sock, const char *ip_str)
@@ -142,6 +138,9 @@ void app_main(void)
     // xTaskCreatePinnedToCore(cpu_monitor_task, "cpu_mon", 4096, NULL, 3, NULL, 0);
 
     xTaskCreatePinnedToCore(sp_process_task, "sp_process_task", 4096, NULL, 4, NULL, 1);
+
+    // Cheat 引脚状态输出（GPIO1/GPIO2，由 TCP 命令控制）
+    cheat_init();
 
     motor_config_t motor_cfg = {
         .pwm_gpio = 21,

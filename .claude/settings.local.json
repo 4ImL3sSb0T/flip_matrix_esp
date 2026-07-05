@@ -66,7 +66,8 @@
       "Bash(dir \"D:\\\\Project\\\\Esp32s3_LEDPan\\\\tools\\\\data_process\\\\\" 2>/dev/null)",
       "Bash(wsl *)",
       "PowerShell(\\(Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned\\) ; \\(& d:\\\\Project\\\\Esp32s3_LEDPan\\\\tools\\\\data_process\\\\.venv\\\\Scripts\\\\Activate.ps1\\))",
-      "Bash(.venv/Scripts/python.exe -c ' *)"
+      "Bash(.venv/Scripts/python.exe -c ' *)",
+      "PowerShell(. D:\\\\Software\\\\Esp\\\\v5.5.4\\\\esp-idf\\\\export.ps1 2>$null; idf.py build 2>&1 | Select-Object -Last 30)"
     ]
   }
 }
