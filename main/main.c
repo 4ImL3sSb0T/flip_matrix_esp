@@ -110,8 +110,8 @@ void app_main(void)
         .imu_deinit = imu963ra_deinit,
         .imu_get_mag = imu963ra_read_mag,
     };
-    exit_code_t ret = imu_service_init(&imu963ra_sensor);
-    if (ret != EXIT_OK) {
+    exit_code_t imu_ret = imu_service_init(&imu963ra_sensor);
+    if (imu_ret != EXIT_OK) {
         // IMU没有安装就开启串口转TCP服务，方便调试
         xTaskCreatePinnedToCore(uart2tcp_task, "uart2tcp_task", 4096, NULL, 5, NULL, 1);
         ESP_LOGE("MAIN", "Failed to initialize IMU service");
@@ -131,8 +131,8 @@ void app_main(void)
         .dir_invert = false,
     };
 
-    exit_code_t ret = motor_init(&motor_cfg);
-    if (ret != EXIT_OK) {
+    exit_code_t motor_ret = motor_init(&motor_cfg);
+    if (motor_ret != EXIT_OK) {
         ESP_LOGE("MAIN", "Failed to initialize motor");
         return;
     }
