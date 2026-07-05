@@ -26,6 +26,25 @@
 // ── TCP server 回调（留空，由用户填充业务逻辑）──────────────────────────────
 static void tcp_on_data(int client_sock, const char *data, int len)
 {
+    if (len > 0) {
+        switch (data[0])
+        {
+        case 'A':
+            tcp_server_broadcast("Hello from ESP32!", 18);
+            break;
+        case 'B':
+            /* code */
+            break;
+        case 'C':
+            /* code */
+            break;
+        case 'D':
+            /* code */
+            break;
+        default:
+            break;
+        }
+    }
     ESP_LOGI("TCP", "[sock=%d] Received %d bytes: %.*s", client_sock, len, len, data);
 }
 
