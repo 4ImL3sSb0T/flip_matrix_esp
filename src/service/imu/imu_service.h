@@ -16,6 +16,7 @@ typedef struct
 exit_code_t imu_service_init(imu_sensor_t *imu_sensor);
 exit_code_t imu_service_start(void);
 exit_code_t imu_service_deinit(void);
+bool imu_service_is_ok(void);
 
 // 获取 acc ring buffer（数据类型 vec3f，单位 g）
 MessageBufferHandle_t imu_service_get_acc_buffer(void);

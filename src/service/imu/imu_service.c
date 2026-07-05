@@ -19,6 +19,7 @@ static imu_sensor_t *s_sensor = NULL;
 static MessageBufferHandle_t s_acc_ring_buf = NULL;
 static stmdev_ctx_t s_dev_ctx;
 static uint16_t s_event_base_id = 0;
+static bool s_is_ok = false;
 
 // ── lsm6dsr_reg 平台回调 ──────────────────────────────────────────────────────
 
@@ -175,7 +176,10 @@ exit_code_t imu_service_init(imu_sensor_t *imu_sensor)
 
     s_sensor = imu_sensor;
     exit_code_t ret = s_sensor->imu_init();
-    if (ret != EXIT_OK) return ret;
+    if (ret != EXIT_OK) {
+        return ret;
+    }
+    s_is_ok = true;
 
     eventbus_allocate_module_id(&s_event_base_id);
 
@@ -204,6 +208,10 @@ exit_code_t imu_service_deinit(void)
     if (s_acc_ring_buf) { vMessageBufferDelete(s_acc_ring_buf); s_acc_ring_buf = NULL; }
     s_sensor = NULL;
     return EXIT_OK;
+}
+
+bool imu_service_is_ok(void) {
+	return s_is_ok;
 }
 
 MessageBufferHandle_t imu_service_get_acc_buffer(void)

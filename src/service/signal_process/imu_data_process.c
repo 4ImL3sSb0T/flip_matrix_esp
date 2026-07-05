@@ -156,8 +156,10 @@ void sp_process_task(void *arg)
 
             // 调试
             static const uint32_t footer = 0xFFFFFFFF;  // NaN，帧尾
-            tcp_server_broadcast(batch, bytes);
-            tcp_server_broadcast(&footer, sizeof(footer));
+            if (imu_service_is_ok()) {
+                tcp_server_broadcast(batch, bytes);
+                tcp_server_broadcast(&footer, sizeof(footer));
+            }
 
             // 累积够一个 hop，执行 FFT
             if (s_hop_count >= SP_HOP_SIZE) {
